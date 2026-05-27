@@ -22,12 +22,31 @@ See [PRD.md](PRD.md) for full requirements.
 ## Setup (run once)
 
 ```bash
-python setup/generate_state_definitions.py --llm gemini   # requires GEMINI_API_KEY
+pip install -r requirements.txt
+playwright install chromium              # downloads the Playwright browser binary
+
+python setup/generate_state_definitions.py --llm gemini   # requires GEMINI_API_KEY in .env
 # or
 python setup/generate_state_definitions.py --llm ollama   # requires Ollama running locally
 ```
 
-This reads `config/2022ISD.pdf` and writes `config/state_definitions.json`. Commit the result. Re-run when a new ISD edition is published (approximately every 5 years).
+**Gemini API key:** create a `.env` file in the project root with `GEMINI_API_KEY=<your key>`. The script loads it automatically via `python-dotenv`. `.env` is gitignored.
+
+**Additional flags for `generate_state_definitions.py`:**
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--pdf PATH` | `config/2022ISD.pdf` | Path to the ISD PDF |
+| `--output PATH` | `config/state_definitions.json` | Output path |
+| `--force` | off | Overwrite existing output without prompting |
+| `--ollama-url URL` | `http://localhost:11434` | Ollama API base URL |
+| `--ollama-model NAME` | `llama3.2` | Ollama model to use |
+
+**PDF library:** the script uses `pdfplumber` (not `pypdf`) for page-by-page text extraction.
+
+**Rate limits:** the Gemini free tier is ~15 RPM. The script sleeps 4 seconds between state requests. If you hit quota errors (429), wait a few minutes and re-run with `--force`; already-processed states in the JSON will need to be re-extracted.
+
+`config/state_definitions.json` has already been generated and committed. Re-run only when a new ISD edition is published (approximately every 5 years).
 
 ---
 
@@ -67,3 +86,23 @@ Each state section describes which types exist in that state, what they are loca
 - **Scorer is pluggable.** v1 uses keyword matching only. Future modes add sentence transformers (Mode 2), local Ollama LLM (Mode 3), or Gemini free tier (Mode 4) without changing the pipeline.
 - **Output is written incrementally** (one CSV row appended per completed URL) so runs are crash-safe and resumable via `--resume`. Use `--new-only` for delta runs when new URLs are added to `urls.csv`.
 - **robots.txt is fail-open.** If `robots.txt` is unreachable, a warning is logged and the crawl proceeds.
+
+---
+
+## Implementation status
+
+| Phase | Description | Status |
+|---|---|---|
+| 0 | Scaffolding (`requirements.txt`, `__init__.py` files) | Done |
+| 1 | `setup/generate_state_definitions.py` + `config/state_definitions.json` | Done |
+| 2 | `crawler/http_client.py`, `crawler/robots.py` | Not started |
+| 3 | `crawler/state_tagger.py` | Not started |
+| 4 | Page fetcher + JS detection + `crawler/playwright_client.py` | Not started |
+| 5 | Depth crawler (`crawler/orchestrator.py`) | Not started |
+| 6 | Dataset detector (`crawler/dataset_detector.py`) | Not started |
+| 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Not started |
+| 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Not started |
+| 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
+| 10 | `run.py` entrypoint | Not started |
+
+**Current state:** only the one-time PDF setup script exists. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
