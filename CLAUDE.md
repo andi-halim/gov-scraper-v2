@@ -32,6 +32,8 @@ python setup/generate_state_definitions.py --llm ollama   # requires Ollama runn
 
 **Gemini API key:** create a `.env` file in the project root with `GEMINI_API_KEY=<your key>`. The script loads it automatically via `python-dotenv`. `.env` is gitignored.
 
+**Gemini SDK:** uses `google-genai` (the current unified SDK, `from google import genai`). The deprecated `google-generativeai` package is not used.
+
 **Additional flags for `generate_state_definitions.py`:**
 
 | Flag | Default | Purpose |
@@ -39,12 +41,22 @@ python setup/generate_state_definitions.py --llm ollama   # requires Ollama runn
 | `--pdf PATH` | `config/2022ISD.pdf` | Path to the ISD PDF |
 | `--output PATH` | `config/state_definitions.json` | Output path |
 | `--force` | off | Overwrite existing output without prompting |
+| `--gemini-model NAME` | `gemini-2.5-flash` | Gemini model to use (Gemini backend only) |
+| `--states XX,YY` | all states | Comma-separated abbreviations to process; useful for testing (e.g. `AL,CA,TX`) |
 | `--ollama-url URL` | `http://localhost:11434` | Ollama API base URL |
 | `--ollama-model NAME` | `llama3.2` | Ollama model to use |
 
 **PDF library:** the script uses `pdfplumber` (not `pypdf`) for page-by-page text extraction.
 
-**Rate limits:** the Gemini free tier is ~15 RPM. The script sleeps 4 seconds between state requests. If you hit quota errors (429), wait a few minutes and re-run with `--force`; already-processed states in the JSON will need to be re-extracted.
+**Rate limits:** the Gemini free tier is ~15 RPM. The script sleeps 4 seconds between every request (success or failure) and retries up to 3 times on 429 errors, respecting the `retry_delay` hint in the response. If the daily quota is exhausted, wait until midnight UTC and re-run with `--force`.
+
+**Testing with a subset of states:** use `--states` to limit processing to specific states. A full run takes ~4 minutes (51 states × 4 s sleep) and consumes the daily free-tier quota. Use a small subset to verify output format before committing to a full run:
+
+```bash
+python setup/generate_state_definitions.py --llm gemini --states LA,AK --force
+```
+
+Only the listed abbreviations will be written to the output JSON. Any other states already in the file are overwritten (the output is always a complete replacement, not a merge).
 
 `config/state_definitions.json` has already been generated and committed. Re-run only when a new ISD edition is published (approximately every 5 years).
 

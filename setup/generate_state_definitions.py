@@ -162,26 +162,49 @@ def _fallback_section_detection(lines: list[str]) -> list[tuple[int, str]]:
 # LLM backends
 # ---------------------------------------------------------------------------
 
-def call_gemini(state_name: str, section_text: str, model: str = "gemini-1.5-flash") -> dict:
+_GEMINI_MAX_RETRIES = 3
+
+
+def call_gemini(state_name: str, section_text: str, model: str = "gemini-2.5-flash") -> dict:
     """Call Gemini API and return {"census_terms": [...], "notes": "..."}."""
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import errors as genai_errors, types as genai_types
     except ImportError:
-        log.error("google-generativeai not installed. Run: pip install google-generativeai")
+        log.error("google-genai not installed. Run: pip install google-genai")
         sys.exit(1)
 
-    load_dotenv() # Load environment variables from .env file if present
+    load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         log.error("GEMINI_API_KEY environment variable is not set.")
         sys.exit(1)
 
-    genai.configure(api_key=api_key)
-    client = genai.GenerativeModel(model)
+    client = genai.Client(api_key=api_key)
     prompt = PROMPT_TEMPLATE.format(state_name=state_name, section_text=section_text)
 
-    response = client.generate_content(prompt)
-    return _parse_llm_response(response.text.strip(), state_name)
+    for attempt in range(1, _GEMINI_MAX_RETRIES + 1):
+        try:
+            response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(
+                            disable=True
+                        ),
+                    ),
+                )
+            return _parse_llm_response((response.text or "").strip(), state_name)
+        except genai_errors.ClientError as exc:
+            if exc.code != 429 or attempt == _GEMINI_MAX_RETRIES:
+                raise
+            m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", str(exc))
+            wait = int(m.group(1)) + 5 if m else (60 * attempt)
+            log.warning(
+                "  429 for %s (attempt %d/%d); sleeping %ds...",
+                state_name, attempt, _GEMINI_MAX_RETRIES, wait,
+            )
+            time.sleep(wait)
 
 
 def call_ollama(
@@ -243,6 +266,7 @@ def process_states(
     llm: str,
     ollama_url: str,
     ollama_model: str,
+    gemini_model: str = "gemini-2.5-flash",
 ) -> dict:
     """Run each state section through the selected LLM backend."""
     results: dict = {}
@@ -254,9 +278,7 @@ def process_states(
 
         try:
             if llm == "gemini":
-                result = call_gemini(state_name, section_text)
-                # Gemini free tier: ~15 RPM → sleep 4 s between requests
-                time.sleep(4)
+                result = call_gemini(state_name, section_text, model=gemini_model)
             else:
                 result = call_ollama(state_name, section_text, base_url=ollama_url, model=ollama_model)
 
@@ -266,6 +288,11 @@ def process_states(
         except Exception as exc:
             log.error(f"  Error processing {state_name}: {exc}")
             results[abbrev] = {"census_terms": [], "notes": f"error: {exc}"}
+
+        finally:
+            if llm == "gemini":
+                # Gemini free tier: ~15 RPM → sleep 4 s between every request (success or failure)
+                time.sleep(4)
 
     return results
 
@@ -302,6 +329,17 @@ def main() -> None:
         help="Overwrite output file without prompting.",
     )
     parser.add_argument(
+        "--gemini-model",
+        default="gemini-2.5-flash",
+        help="Gemini model name (default: gemini-2.5-flash).",
+    )
+    parser.add_argument(
+        "--states",
+        metavar="XX,YY",
+        help="Comma-separated state abbreviations to process (e.g. AL,CA,TX). "
+             "Omit to process all states.",
+    )
+    parser.add_argument(
         "--ollama-url",
         default="http://localhost:11434",
         help="Ollama base URL (default: http://localhost:11434).",
@@ -336,8 +374,17 @@ def main() -> None:
     if missing:
         log.warning(f"No section found for: {missing}")
 
+    if args.states:
+        requested = [s.strip().upper() for s in args.states.split(",")]
+        invalid = [s for s in requested if s not in set(STATE_NAMES.values())]
+        if invalid:
+            log.error("Unknown state abbreviations: %s", invalid)
+            sys.exit(1)
+        sections = {k: v for k, v in sections.items() if k in requested}
+        log.info("Filtering to %d state(s): %s", len(sections), requested)
+
     # T-12 / T-13: process each section through the LLM
-    results = process_states(sections, args.llm, args.ollama_url, args.ollama_model)
+    results = process_states(sections, args.llm, args.ollama_url, args.ollama_model, args.gemini_model)
 
     # T-14: write output JSON
     output_path.parent.mkdir(parents=True, exist_ok=True)
