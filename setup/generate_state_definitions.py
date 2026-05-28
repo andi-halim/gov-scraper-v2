@@ -6,9 +6,10 @@ Extracts per-state Census of Governments vocabulary from config/2022ISD.pdf
 and writes config/state_definitions.json.
 
 Usage:
-    python setup/generate_state_definitions.py --llm gemini   # requires GEMINI_API_KEY
+    python setup/generate_state_definitions.py --llm gemini   # auto-detects remaining states; prompts before starting
     python setup/generate_state_definitions.py --llm ollama   # requires Ollama running locally
-    python setup/generate_state_definitions.py --llm gemini --force  # overwrite without prompt
+    python setup/generate_state_definitions.py --llm gemini --force      # skip confirmation prompt
+    python setup/generate_state_definitions.py --llm gemini --states AK  # process specific states only
 """
 
 import argparse
@@ -20,6 +21,7 @@ import sys
 import time
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Optional
 
 logging.basicConfig(
     level=logging.INFO,
@@ -158,6 +160,36 @@ def _fallback_section_detection(lines: list[str]) -> list[tuple[int, str]]:
     return positions
 
 
+def _load_remaining_states(output_path: Path, abbrev_path: Path) -> list[str]:
+    """Return abbreviations that still need processing, in state_abbrev.json order.
+
+    A state is considered done when it has non-empty census_terms and notes that do
+    not start with 'error:' or 'parse_error:'. Both absent and errored states are
+    returned as remaining.
+    """
+    if not abbrev_path.exists():
+        log.error("state_abbrev.json not found: %s", abbrev_path)
+        sys.exit(1)
+    with open(abbrev_path, encoding="utf-8") as fh:
+        all_abbrevs: list[str] = json.load(fh)
+
+    existing: dict = {}
+    if output_path.exists():
+        with open(output_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+
+    remaining = []
+    for abbrev in all_abbrevs:
+        entry = existing.get(abbrev)
+        if entry is None:
+            remaining.append(abbrev)
+        elif not entry.get("census_terms"):
+            remaining.append(abbrev)
+        elif entry.get("notes", "").startswith(("error:", "parse_error:")):
+            remaining.append(abbrev)
+    return remaining
+
+
 # ---------------------------------------------------------------------------
 # LLM backends
 # ---------------------------------------------------------------------------
@@ -165,7 +197,12 @@ def _fallback_section_detection(lines: list[str]) -> list[tuple[int, str]]:
 _GEMINI_MAX_RETRIES = 3
 
 
-def call_gemini(state_name: str, section_text: str, model: str = "gemini-2.5-flash") -> dict:
+def call_gemini(
+    state_name: str,
+    section_text: str,
+    model: str = "gemini-2.5-flash",
+    request_counter: Optional[list[int]] = None,
+) -> dict:
     """Call Gemini API and return {"census_terms": [...], "notes": "..."}."""
     try:
         from google import genai
@@ -184,6 +221,8 @@ def call_gemini(state_name: str, section_text: str, model: str = "gemini-2.5-fla
     prompt = PROMPT_TEMPLATE.format(state_name=state_name, section_text=section_text)
 
     for attempt in range(1, _GEMINI_MAX_RETRIES + 1):
+        if request_counter is not None:
+            request_counter[0] += 1
         try:
             response = client.models.generate_content(
                     model=model,
@@ -195,16 +234,20 @@ def call_gemini(state_name: str, section_text: str, model: str = "gemini-2.5-fla
                     ),
                 )
             return _parse_llm_response((response.text or "").strip(), state_name)
-        except genai_errors.ClientError as exc:
-            if exc.code != 429 or attempt == _GEMINI_MAX_RETRIES:
+        except genai_errors.APIError as exc:
+            retryable = exc.code in (429, 503)
+            if not retryable or attempt == _GEMINI_MAX_RETRIES:
                 raise
             m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", str(exc))
             wait = int(m.group(1)) + 5 if m else (60 * attempt)
             log.warning(
-                "  429 for %s (attempt %d/%d); sleeping %ds...",
-                state_name, attempt, _GEMINI_MAX_RETRIES, wait,
+                "  %d for %s (attempt %d/%d); sleeping %ds...",
+                exc.code, state_name, attempt, _GEMINI_MAX_RETRIES, wait,
             )
             time.sleep(wait)
+
+    # Unreachable: the final retry always raises; this satisfies the type checker.
+    raise RuntimeError(f"call_gemini exhausted all retries for {state_name}")
 
 
 def call_ollama(
@@ -267,18 +310,32 @@ def process_states(
     ollama_url: str,
     ollama_model: str,
     gemini_model: str = "gemini-2.5-flash",
+    max_requests: int = 0,
+    request_counter: Optional[list[int]] = None,
 ) -> dict:
     """Run each state section through the selected LLM backend."""
     results: dict = {}
     total = len(sections)
 
     for i, (abbrev, section_text) in enumerate(sections.items(), 1):
+        if max_requests and request_counter is not None and request_counter[0] >= max_requests:
+            log.warning(
+                "Daily request limit (%d) reached after %d state(s). "
+                "Run again tomorrow to continue.",
+                max_requests, i - 1,
+            )
+            break
+
         state_name = ABBREV_TO_NAME.get(abbrev, abbrev)
         log.info(f"[{i}/{total}] {state_name} ({abbrev})...")
 
         try:
             if llm == "gemini":
-                result = call_gemini(state_name, section_text, model=gemini_model)
+                result = call_gemini(
+                    state_name, section_text,
+                    model=gemini_model,
+                    request_counter=request_counter,
+                )
             else:
                 result = call_ollama(state_name, section_text, base_url=ollama_url, model=ollama_model)
 
@@ -291,8 +348,8 @@ def process_states(
 
         finally:
             if llm == "gemini":
-                # Gemini free tier: ~15 RPM → sleep 4 s between every request (success or failure)
-                time.sleep(4)
+                # Gemini free tier: ~15 RPM → sleep 10s between every request (success or failure)
+                time.sleep(10)
 
     return results
 
@@ -326,7 +383,7 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite output file without prompting.",
+        help="Skip the confirmation prompt.",
     )
     parser.add_argument(
         "--gemini-model",
@@ -337,7 +394,16 @@ def main() -> None:
         "--states",
         metavar="XX,YY",
         help="Comma-separated state abbreviations to process (e.g. AL,CA,TX). "
-             "Omit to process all states.",
+             "Results are merged into existing output. When omitted, the script "
+             "auto-detects remaining states and caps at --max-requests per run.",
+    )
+    parser.add_argument(
+        "--max-requests",
+        type=int,
+        default=20,
+        metavar="N",
+        help="Maximum Gemini API calls when --states is omitted "
+             "(default: 20, the free-tier RPD cap). Each retry attempt counts.",
     )
     parser.add_argument(
         "--ollama-url",
@@ -351,13 +417,33 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # T-15: guard against unintentional overwrite
     output_path = Path(args.output)
-    if output_path.exists() and not args.force:
-        answer = input(f"{output_path} already exists. Overwrite? [y/N] ").strip().lower()
-        if answer != "y":
-            log.info("Aborted. Pass --force to skip this prompt.")
+    abbrev_path = Path("config/state_abbrev.json")
+    remaining: list[str] = []
+
+    # --- Auto-detect mode (no --states): show progress summary and confirm ---
+    if not args.states:
+        remaining = _load_remaining_states(output_path, abbrev_path)
+        with open(abbrev_path, encoding="utf-8") as fh:
+            total_states = len(json.load(fh))
+        done_count = total_states - len(remaining)
+
+        if not remaining:
+            log.info("All %d states are already complete. Nothing to do.", total_states)
             sys.exit(0)
+
+        to_process = min(len(remaining), args.max_requests)
+        print(f"\nProgress: {done_count}/{total_states} done, {len(remaining)} remaining.")
+        print(
+            f"Will process up to {to_process} state(s) this run "
+            f"(--max-requests to change; each retry also counts against the limit)."
+        )
+
+        if not args.force:
+            answer = input("Continue? [y/N] ").strip().lower()
+            if answer != "y":
+                log.info("Aborted.")
+                sys.exit(0)
 
     pdf_path = Path(args.pdf)
     if not pdf_path.exists():
@@ -375,6 +461,7 @@ def main() -> None:
         log.warning(f"No section found for: {missing}")
 
     if args.states:
+        # Manual mode: process exactly the requested states; no request cap.
         requested = [s.strip().upper() for s in args.states.split(",")]
         invalid = [s for s in requested if s not in set(STATE_NAMES.values())]
         if invalid:
@@ -382,22 +469,55 @@ def main() -> None:
             sys.exit(1)
         sections = {k: v for k, v in sections.items() if k in requested}
         log.info("Filtering to %d state(s): %s", len(sections), requested)
+        request_counter: Optional[list[int]] = None
+        effective_max = 0
+    else:
+        # Auto mode: filter to remaining states, capped at max_requests.
+        available = [s for s in remaining if s in sections]
+        no_section = [s for s in remaining if s not in sections]
+        if no_section:
+            log.warning("No PDF section found for: %s (skipping)", no_section)
+        to_process_list = available[:args.max_requests]
+        sections = {k: v for k, v in sections.items() if k in set(to_process_list)}
+        log.info("Processing %d remaining state(s): %s", len(sections), to_process_list)
+        request_counter = [0]
+        effective_max = args.max_requests
 
     # T-12 / T-13: process each section through the LLM
-    results = process_states(sections, args.llm, args.ollama_url, args.ollama_model, args.gemini_model)
+    results = process_states(
+        sections, args.llm, args.ollama_url, args.ollama_model, args.gemini_model,
+        max_requests=effective_max,
+        request_counter=request_counter,
+    )
 
-    # T-14: write output JSON
+    # T-14: always merge into existing output to preserve prior results
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if output_path.exists():
+        with open(output_path, "r", encoding="utf-8") as fh:
+            existing = json.load(fh)
+    existing.update(results)
     with open(output_path, "w", encoding="utf-8") as fh:
-        json.dump(results, fh, indent=2, ensure_ascii=False)
+        json.dump(existing, fh, indent=2, ensure_ascii=False)
 
-    log.info(f"Wrote {len(results)} state entries → {output_path}")
+    log.info("Wrote %d state entries → %s", len(existing), output_path)
 
-    empty = sorted(k for k, v in results.items() if not v["census_terms"])
+    empty = sorted(k for k, v in existing.items() if not v["census_terms"])
     if empty:
-        log.warning(f"States with zero census_terms extracted: {empty}")
-    else:
-        log.info("All states have at least one census_term.")
+        log.warning("States with zero census_terms extracted: %s", empty)
+
+    # Post-run summary for auto mode
+    if not args.states:
+        still_remaining = _load_remaining_states(output_path, abbrev_path)
+        if still_remaining:
+            log.info(
+                "%d state(s) still remaining: %s. Run again tomorrow to continue.",
+                len(still_remaining), still_remaining,
+            )
+        else:
+            log.info("All states complete!")
+        if request_counter is not None:
+            log.info("Total Gemini API calls this run (including retries): %d", request_counter[0])
 
 
 if __name__ == "__main__":

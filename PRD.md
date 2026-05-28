@@ -147,6 +147,40 @@ Scan all pages visited during the crawl (up to depth 2) for links to downloadabl
 - Extracts per-state Census terminology from the PDF and writes `config/state_definitions.json`.
 - Must be run once before the first crawl and re-run when a new ISD edition is published (approximately every 5 years).
 - The generated file is committed to the repository so subsequent users do not need an LLM to run the crawler.
+- **Auto-detect mode** (when `--states` is omitted): compares `config/state_abbrev.json` against the existing output to identify states that are absent, have empty `census_terms`, or have error notes, then prompts for confirmation before processing. Stops after `--max-requests` API calls (default 20, matching the Gemini free-tier RPD cap). Retries transient 429 and 503 errors up to 3 times; each retry counts against the daily limit. Results are always merged into the existing file — prior entries are never overwritten. A post-run summary logs how many states remain.
+- **Manual mode** (`--states XX,YY`): processes exactly the specified states with no request cap; results are merged into the existing file.
+
+### FR-12: Open Data Portal Detection and Routing
+
+After the initial page fetch (FR-6), apply a two-pass detection process before the depth crawler and scorer run. If a known open data platform is identified, route the URL to a platform-specific API adapter and skip the standard depth crawler.
+
+**Pass 1 — Passive detection (zero extra requests)**
+
+Scan the HTML and response headers already fetched for platform-specific signatures:
+
+| Platform | Passive signals |
+|---|---|
+| Socrata / Tyler Technologies | Footer text contains "Powered by Socrata" or "Powered by Tyler Data & Insights"; response header `X-Socrata-RequestId` present; scripts loaded from `*.socrata.com` or `*.tylertech.com`; CSS classes prefixed `socrata-` or `soda-`; meta tag `<meta name="soda-host">` present |
+| CKAN | `<meta name="generator" content="ckan">` in page `<head>`; `<body class="ckan-*">` or `<html id="ckan-*">`; inline JS contains `ckan.module(`; internal links to `/dataset` path |
+| ArcGIS Hub | Custom web components `<hub-hero>`, `<hub-gallery>`, or any `<arcgis-hub-*>` element in the DOM; scripts loaded from `js.arcgis.com` or `cdn.arcgis.com`; `<meta property="og:site_name" content="ArcGIS Hub">`; domain matches `*.hub.arcgis.com` or `*.opendata.arcgis.com` |
+
+**Pass 2 — Active API probe (one extra request, only if Pass 1 is inconclusive)**
+
+Issue a single GET to the platform's canonical status or catalog endpoint:
+
+| Platform | Probe URL | Success condition |
+|---|---|---|
+| Socrata | `{base_url}/api/catalog/v1?limit=1` | HTTP 200 + JSON body contains `"results"` array |
+| CKAN | `{base_url}/api/3/action/site_read` | HTTP 200 + JSON body contains `"success": true` |
+| ArcGIS Hub | `{base_url}/api/v3/datasets?page[size]=1` | HTTP 200 + JSON body contains `"data"` array |
+
+If passive signals point to multiple platforms (rare), the active API probe result takes precedence.
+
+**Routing:**
+- Portal detected → skip depth crawler; call the appropriate adapter (see §12).
+- No portal detected → proceed with the standard depth crawler and scorer.
+
+**Output:** record `portal_platform` (`Socrata`, `CKAN`, `ArcGIS Hub`, or empty string), `portal_dataset_count` (total datasets in catalog), `portal_relevant_count` (datasets with score > 0), and `top_dataset_urls` (pipe-separated, up to 10, sorted by relevance score descending).
 
 ---
 
@@ -210,7 +244,16 @@ Known federal domains include at minimum: `hud.gov`, `epa.gov`, `census.gov`, `u
 
 **Inputs:**
 - `config/2022ISD.pdf` — Census Bureau ISD, 339 pages, one section per state/DC.
-- `--llm gemini` (Gemini 2.0 Flash free tier, requires `GEMINI_API_KEY`) or `--llm ollama` (local model, requires Ollama running).
+- `config/state_abbrev.json` — ordered list of all 51 state/DC abbreviations; used to track completion progress.
+- `--llm gemini` (Gemini 2.5 Flash free tier, requires `GEMINI_API_KEY`) or `--llm ollama` (local model, requires Ollama running).
+
+**Key flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--states XX,YY` | *(auto-detect)* | Process specific states only; merge into existing output |
+| `--max-requests N` | `20` | Max API calls per auto-detect run (retries count); matches free-tier RPD cap |
+| `--force` | off | Skip confirmation prompt |
 
 **Output schema:**
 ```json
@@ -267,8 +310,11 @@ config/urls.csv
   |      |                                  |
   | [ActivityChecker]  (HTTP GET + redirect)|
   |      |                                  |
-  | [Crawler]  (httpx + Playwright fallback)|
-  |      |         depth=2, same-domain     |
+  | [PortalDetector]  (passive → API probe) |
+  |      |                                  |
+  |  if portal: [PortalAdapter] (API-first) |
+  |  else:      [Crawler]  depth=2          |
+  |               (httpx + Playwright)      |
   | [Scorer]   (keyword + state vocab)      |
   |      |                                  |
   | [DatasetDetector]                       |
@@ -297,6 +343,7 @@ gov-scraper-v2/
     urls.csv
     keywords.csv
     state_definitions.json        # generated; committed
+    state_abbrev.json             # ordered list of 51 abbreviations; committed
     2022ISD.pdf
   crawler/
     orchestrator.py
@@ -305,6 +352,12 @@ gov-scraper-v2/
     playwright_client.py
     state_tagger.py
     dataset_detector.py
+    portal_detector.py
+  portals/
+    __init__.py
+    socrata.py
+    ckan.py
+    arcgis_hub.py
   scorer/
     scorer.py
     keyword_loader.py
@@ -318,7 +371,45 @@ gov-scraper-v2/
 
 ---
 
-## 12. Output Report Specification
+## 12. Portal Detection Adapters
+
+Each adapter enumerates all datasets in a detected portal's catalog via API, scores each dataset's metadata against the effective keyword set, and returns an aggregated result for the output row.
+
+### Shared adapter contract
+
+Each adapter receives `(base_url: str, effective_keywords: frozenset, http_client)` and returns:
+
+```python
+{
+    "portal_dataset_count": int,
+    "portal_relevant_count": int,    # datasets with relevance_score > 0
+    "top_dataset_urls": list[str],   # up to 10, sorted by relevance score desc
+    "matched_keywords": list[str],   # union of all matched keywords across datasets
+    "relevance_score": int           # max relevance score across all datasets
+}
+```
+
+Metadata scoring: concatenate each dataset's title, description, and tags into a single text block; run the same weighted keyword matcher from FR-7; record per-dataset score. URL and domain text are excluded from scoring (consistent with FR-7).
+
+### Socrata / Tyler Technologies adapter
+
+- Endpoint: `GET /api/catalog/v1?limit=100&offset=N` — paginate until all datasets are retrieved.
+- Per dataset: extract `resource.name`, `resource.description`, `classification.domain_tags`, `resource.type`, `permalink`.
+- Apply the same per-domain delay as FR-4 between paginated requests.
+
+### CKAN adapter
+
+- Endpoint: `GET /api/3/action/package_search?rows=100&start=N` — retrieve all dataset metadata in batches (more efficient than per-ID `package_show` lookup).
+- Per dataset: extract `title`, `notes`, `tags[].name`, `resources[].format`, `resources[].url`.
+
+### ArcGIS Hub adapter
+
+- Endpoint: `GET /api/v3/datasets?page[size]=100&page[number]=N` — paginate until complete.
+- Per dataset: extract `attributes.name`, `attributes.description`, `attributes.tags`, `attributes.access.urls.download`.
+
+---
+
+## 13. Output Report Specification
 
 **File:** `output/<YYYY-MM-DD>/results.csv`  
 **One row per input URL** (including skipped/inactive URLs).
@@ -340,13 +431,17 @@ gov-scraper-v2/
 | `dataset_urls` | string | Pipe-separated list of detected dataset URLs |
 | `dataset_formats` | string | Pipe-separated deduplicated format list (e.g., `csv\|xlsx\|pdf`) |
 | `crawl_depth_reached` | integer | Deepest hop level successfully crawled (0–2) |
+| `portal_platform` | string | `Socrata`, `CKAN`, `ArcGIS Hub`, or empty string if not a portal |
+| `portal_dataset_count` | integer | Total datasets enumerated via portal API; 0 for non-portal URLs |
+| `portal_relevant_count` | integer | Datasets with relevance score > 0; 0 for non-portal URLs |
+| `top_dataset_urls` | string | Pipe-separated list of up to 10 dataset URLs sorted by score; empty for non-portal URLs |
 | `error_notes` | string | Description of any errors encountered; empty if none |
 
 `RESOURCE_NAME` is intentionally excluded from the output.
 
 ---
 
-## 13. Configuration
+## 14. Configuration
 
 ### `config/urls.csv`
 
@@ -370,6 +465,10 @@ Generated by `setup/generate_state_definitions.py`. Schema:
 ```
 Do not hand-edit.
 
+### `config/state_abbrev.json`
+
+Ordered JSON array of all 51 state/DC two-letter abbreviations. Used by the setup script to determine processing order and track completion progress. Do not edit.
+
 ### Runtime flags (`run.py`)
 
 | Flag | Default | Description |
@@ -383,7 +482,7 @@ Do not hand-edit.
 
 ---
 
-## 14. Future Enhancements
+## 15. Future Enhancements
 
 The scorer is designed as a pluggable interface. The following modes can be added without changing the pipeline:
 
@@ -401,7 +500,7 @@ Additional enhancements:
 
 ---
 
-## 15. Out of Scope
+## 16. Out of Scope
 
 - Government unit type classification (County / Municipality / Township / etc.)
 - Downloading datasets or storing dataset content

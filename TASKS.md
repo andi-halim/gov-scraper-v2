@@ -19,7 +19,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 - [ ] **T-10** `setup/generate_state_definitions.py` — CLI entrypoint accepting `--llm gemini|ollama` and `--pdf config/2022ISD.pdf`
 - [ ] **T-11** PDF text extraction: use `pdfplumber` or `pypdf` to extract text page-by-page from `config/2022ISD.pdf`; split into per-state sections by detecting state header patterns
-- [ ] **T-12** Gemini backend: prompt Gemini 2.0 Flash (free tier) with each state section; parse response to extract `census_terms` list and `notes` string
+- [ ] **T-12** Gemini backend: prompt Gemini 2.5 Flash (free tier) with each state section; parse response to extract `census_terms` list and `notes` string
 - [ ] **T-13** Ollama backend: same prompt structure as T-12, directed at local Ollama REST API (`http://localhost:11434`)
 - [ ] **T-14** Output writer: merge per-state results into `{ "XX": { "census_terms": [...], "notes": "..." } }` schema and write to `config/state_definitions.json`
 - [ ] **T-15** Guard: if `config/state_definitions.json` already exists, prompt user before overwriting (or require `--force`)
@@ -77,6 +77,41 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   - Navigate to URL, wait for `networkidle`
   - Return rendered `document.body.innerHTML`
   - Shut down browser context after each URL (no persistent browser session across URLs)
+
+---
+
+## Phase 4B — Open Data Portal Detection
+
+> Identifies whether a seed URL is a known open data platform and routes it to a platform-specific API adapter rather than the generic depth crawler. Runs after the initial page fetch (Phase 4) and before the depth crawler (Phase 5).
+
+- [ ] **T-43** `crawler/portal_detector.py` — `PortalDetector` class:
+  - `detect(html: str, headers: dict, base_url: str) -> tuple[str | None, str]`
+  - Returns `(platform, method)` where `platform` is `"Socrata"`, `"CKAN"`, `"ArcGIS Hub"`, or `None`; `method` is `"passive"`, `"probe"`, or `"none"`
+  - Pass 1: scan HTML + response headers for per-platform passive signals (PRD FR-12)
+  - Pass 2: if Pass 1 is inconclusive, fire a single GET probe per candidate platform using the rate-limited client from T-20; use probe endpoints from PRD FR-12 table
+  - If passive signals match multiple platforms, active probe result takes precedence
+
+- [ ] **T-44** Passive signal constants: define per-platform HTML and header signatures as module-level constants in `portal_detector.py`; do not hardcode literal strings inline in detection logic
+
+- [ ] **T-45** `portals/` package scaffolding: `portals/__init__.py`
+
+- [ ] **T-46** `portals/socrata.py` — `SocrataAdapter(base_url, effective_keywords, http_client)`:
+  - Paginate `GET /api/catalog/v1?limit=100&offset=N` until all datasets retrieved
+  - Per dataset: extract `resource.name`, `resource.description`, `classification.domain_tags`, `resource.type`, `permalink`
+  - Score each dataset's concatenated metadata (title + description + tags) using the same weighted matcher as T-71
+  - Return the shared adapter contract dict (PRD §12)
+
+- [ ] **T-47** `portals/ckan.py` — `CKANAdapter(base_url, effective_keywords, http_client)`:
+  - Paginate `GET /api/3/action/package_search?rows=100&start=N` to retrieve all metadata in batches
+  - Per dataset: extract `title`, `notes`, `tags[].name`, `resources[].format`, `resources[].url`
+  - Score metadata; return adapter contract dict
+
+- [ ] **T-48** `portals/arcgis_hub.py` — `ArcGISHubAdapter(base_url, effective_keywords, http_client)`:
+  - Paginate `GET /api/v3/datasets?page[size]=100&page[number]=N` until complete
+  - Per dataset: extract `attributes.name`, `attributes.description`, `attributes.tags`, `attributes.access.urls.download`
+  - Score metadata; return adapter contract dict
+
+- [ ] **T-49** Portal routing in `crawler/orchestrator.py`: after initial page fetch, call `PortalDetector.detect()`; if platform is not `None`, call the matching adapter and skip the depth crawl; if `None`, proceed normally
 
 ---
 
@@ -171,12 +206,14 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   1. Check `RobotsChecker` → record `robots_allowed`, `robots_status`
   2. Fetch seed URL → record `active`, `http_status`, `final_url`, `js_rendered`
   3. If inactive (non-200 or network error), write row immediately and continue
-  4. Run `StateTagger` → record `state`
-  5. Run depth crawler → collect all visited pages
-  6. Run `DatasetDetector` → record `datasets_found`, `dataset_urls`, `dataset_formats`
-  7. Run `Scorer` → record `relevance_score`, `matched_keywords`
-  8. Record `crawl_depth_reached`
-  9. `ReportWriter.append_row(result)`
+  4. Run `PortalDetector` → record `portal_platform`
+  5. If portal detected: call the matching adapter → record `portal_dataset_count`, `portal_relevant_count`, `top_dataset_urls`, `relevance_score`, `matched_keywords`; skip to step 10
+  6. Run `StateTagger` → record `state`
+  7. Run depth crawler → collect all visited pages
+  8. Run `DatasetDetector` → record `datasets_found`, `dataset_urls`, `dataset_formats`
+  9. Run `Scorer` → record `relevance_score`, `matched_keywords`
+  10. Record `crawl_depth_reached`
+  11. `ReportWriter.append_row(result)`
 - [ ] **T-103** Logging: use Python `logging` module; emit `INFO` for each URL processed, `WARNING` for robots unavailable and duplicates/skips, `ERROR` for per-URL failures
 
 ---
@@ -192,6 +229,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 - [ ] **T-114** Verify dataset detection: a page containing `<a href="data.csv">` should produce `datasets_found: true`, `dataset_formats: csv`
 - [ ] **T-115** Verify `--resume`: kill the process mid-run; restart with `--resume`; confirm no URL is processed twice in the output CSV
 - [ ] **T-116** Verify `--new-only`: add a new URL to `config/urls.csv`; run with `--new-only`; confirm only the new URL is processed
+- [ ] **T-117** Verify portal detection: confirm a known Socrata portal URL produces `portal_platform: Socrata` and non-zero `portal_dataset_count`; confirm a CKAN portal produces `portal_platform: CKAN`; confirm a non-portal URL produces an empty `portal_platform`
 
 ---
 
@@ -214,4 +252,8 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 | `dataset_urls` | pipe-separated |
 | `dataset_formats` | pipe-separated, deduplicated |
 | `crawl_depth_reached` | 0–2 |
+| `portal_platform` | `Socrata`, `CKAN`, `ArcGIS Hub`, or empty |
+| `portal_dataset_count` | integer; 0 for non-portal URLs |
+| `portal_relevant_count` | integer; 0 for non-portal URLs |
+| `top_dataset_urls` | pipe-separated; empty for non-portal URLs |
 | `error_notes` | empty string if no errors |

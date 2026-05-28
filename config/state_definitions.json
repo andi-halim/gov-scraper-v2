@@ -1,7 +1,28 @@
 {
   "AK": {
-    "census_terms": [],
-    "notes": "error: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    "census_terms": [
+      "borough governments",
+      "borough",
+      "boroughs",
+      "consolidated city-borough governments",
+      "unorganized borough",
+      "organized boroughs",
+      "first-class boroughs",
+      "second-class boroughs",
+      "home-rule boroughs",
+      "county equivalents",
+      "census areas",
+      "municipal governments",
+      "cities",
+      "first-class cities",
+      "second-class cities",
+      "city-borough consolidated governments",
+      "dependent public school systems",
+      "borough school districts",
+      "city school districts",
+      "regional educational attendance area"
+    ],
+    "notes": "Alaska's local government structure is unique, featuring boroughs as county-equivalents, including organized, unorganized, and consolidated city-borough types, along with census areas. Municipalities primarily consist of cities and city-borough consolidated governments. The state has no township governments or independent school districts, instead relying on dependent public school systems categorized by borough, city, or regional educational attendance area."
   },
   "LA": {
     "census_terms": [
@@ -28,5 +49,259 @@
       "special education district"
     ],
     "notes": "Louisiana's county-equivalents are known as parishes, typically governed by police juries or parish councils, with some consolidated parish-municipal governments. Municipalities are categorized as cities, towns, and villages. The state features parish and city school districts, alongside various dependent educational and special purpose districts that are often not counted as separate governments."
+  },
+  "AL": {
+    "census_terms": [
+      "county",
+      "counties",
+      "county commission",
+      "cities",
+      "towns",
+      "class 1",
+      "class 2",
+      "class 3",
+      "class 4",
+      "class 5",
+      "class 6",
+      "class 7",
+      "class 8",
+      "county boards of education",
+      "city boards of education",
+      "airport authorities",
+      "airport and industrial authorities",
+      "alabama gulf coast convention and visitors bureau",
+      "alabama municipal electric authority",
+      "capital improvement cooperative districts"
+    ],
+    "notes": "Alabama is entirely covered by county governments and has no township governments or dependent public school systems. Municipalities are classified as cities (2,000+ inhabitants, categorized into eight population classes) or towns (smaller). Public schools are administered by either county or city boards of education, and numerous special districts provide specific services."
+  },
+  "AZ": {
+    "census_terms": [
+      "authorities",
+      "career technical education districts",
+      "cities",
+      "common school districts",
+      "community college districts",
+      "joint common school districts",
+      "joint unified school districts",
+      "municipalities",
+      "provisional community college districts",
+      "special districts",
+      "towns",
+      "unified school districts",
+      "union high school districts"
+    ],
+    "notes": "Arizona's entire area is encompassed by county governments, and it features various municipal types including cities, towns, and general municipalities, notably having no township governments. The state recognizes numerous specific school district types as governments, such as common, unified, and community college districts. Additionally, special districts and authorities are counted as governments, while certain tuition financing districts, dependent public school systems, and educational cooperatives are not."
+  },
+  "AR": {
+    "census_terms": [
+      "quorum court",
+      "justices of the peace",
+      "county judge",
+      "incorporated towns",
+      "first-class cities",
+      "second-class cities",
+      "towns",
+      "school districts"
+    ],
+    "notes": "Arkansas counties, governed by a Quorum Court, encompass the entire state, with some divided into two judicial districts. Municipalities are classified by population as first-class cities, second-class cities, or incorporated towns, and no township governments exist. All public education is provided by a single type of school government known as \"school districts,\" and no dependent school systems or other educational entities are counted as separate governments."
+  },
+  "CA": {
+    "census_terms": [
+      "city and county",
+      "board of supervisors",
+      "cities",
+      "towns",
+      "charter cities",
+      "general law cities",
+      "consolidated city-county government",
+      "school districts",
+      "elementary school districts",
+      "basic district",
+      "city district",
+      "union district",
+      "joint union district",
+      "high school districts",
+      "county district",
+      "unified school district",
+      "unified school districts",
+      "city school districts",
+      "city board of education",
+      "community college district",
+      "community college districts",
+      "boards of education",
+      "trustees",
+      "appointed boards",
+      "air pollution control districts"
+    ],
+    "notes": "California's governmental landscape includes county governments, notably the unique San Francisco city and county, but no township governments. Municipalities are designated as either charter cities or general law cities. The state features diverse public school systems, encompassing elementary, high school, unified, and community college districts, alongside other special districts like air pollution control districts."
+  },
+  "CO": {
+    "census_terms": [
+      "county governments",
+      "counties",
+      "consolidated city-county governments",
+      "municipal governments",
+      "cities",
+      "towns",
+      "township governments",
+      "school districts",
+      "junior college districts",
+      "affiliated junior college districts"
+    ],
+    "notes": "Colorado's area is covered by county governments and consolidated city-county governments, the latter operating primarily as cities and counted as municipal governments alongside traditional cities and towns. The state has no township governments or dependent public school systems. Separate public school system governments include school districts, junior college districts, and affiliated junior college districts."
+  },
+  "CT": {
+    "census_terms": [
+      "counties",
+      "county governments",
+      "municipal governments",
+      "municipalities",
+      "cities",
+      "city governments",
+      "boroughs",
+      "borough governments",
+      "towns",
+      "town governments",
+      "consolidated towns and cities",
+      "consolidated towns and boroughs",
+      "regional school districts",
+      "dependent public school systems",
+      "city school systems",
+      "town school systems"
+    ],
+    "notes": "Connecticut's county governments were abolished in 1960 and are not counted as separate governmental units, though their boundaries remain. Subcounty general purpose governments include municipalities (cities and boroughs) and towns, with towns providing services typically associated with counties and municipalities in other states. Only regional school districts are counted as separate governments, alongside dependent city and town school systems."
+  },
+  "DE": {
+    "census_terms": [
+      "authority",
+      "authorities",
+      "city",
+      "cities",
+      "county",
+      "county council",
+      "delaware river and bay authority",
+      "district libraries",
+      "district library",
+      "housing authorities",
+      "housing authority",
+      "levy court",
+      "municipal electric companies",
+      "municipal electric company",
+      "reorganized school district",
+      "reorganized school districts",
+      "special district",
+      "special districts",
+      "town",
+      "towns",
+      "village",
+      "villages",
+      "vocational school districts",
+      "vocational-technical school district",
+      "vocational-technical school districts"
+    ],
+    "notes": "Delaware's entire area is covered by county governments, with \"levy courts\" and \"county councils\" serving as administrative bodies. Municipal governments include \"cities,\" \"towns,\" and \"villages,\" and there are no organized \"township governments.\" All school districts are \"reorganized school districts,\" and special districts encompass various \"authorities,\" \"district libraries,\" \"housing authorities,\" and \"municipal electric companies.\""
+  },
+  "DC": {
+    "census_terms": [
+      "district of columbia",
+      "dependent public school systems",
+      "district of columbia public schools",
+      "university of the district of columbia",
+      "authority",
+      "washington metropolitan area transit authority",
+      "district of columbia water and sewer authority"
+    ],
+    "notes": "The District of Columbia uniquely performs municipal, county-equivalent, and state-type government functions itself, lacking separate county or independent municipal governments. It operates dependent public school systems and universities instead of independent school districts. Specific special districts, such as the Washington Metropolitan Area Transit Authority, are often termed 'authorities'."
+  },
+  "FL": {
+    "census_terms": [
+      "county government",
+      "county governments",
+      "municipal government",
+      "municipal governments",
+      "cities",
+      "towns",
+      "villages",
+      "school district government",
+      "school district governments",
+      "county school systems",
+      "florida college system districts",
+      "special district governments",
+      "special districts"
+    ],
+    "notes": "Florida's local governments include standard county governments and municipal governments, locally known as cities, towns, and villages. The state does not have township governments. Public school systems are categorized as county school systems or Florida college system districts, and a variety of special districts are also authorized and counted as separate governments."
+  },
+  "GA": {
+    "census_terms": [
+      "cities",
+      "consolidated government",
+      "counties",
+      "county boards of education",
+      "county governments",
+      "county school system",
+      "independent city school districts",
+      "independent school districts",
+      "independent school system",
+      "towns",
+      "unified government"
+    ],
+    "notes": "Georgia's county governments encompass the entire state, though specific consolidated and unified governments in some areas are counted as municipal entities. Municipalities are known as cities and towns, while the state lacks township governments. Public school systems consist of county boards of education, independent city school districts, and independent school districts, with no new independent districts creatable since 1983."
+  },
+  "HI": {
+    "census_terms": [],
+    "notes": "error: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}"
+  },
+  "ID": {
+    "census_terms": [
+      "board of county commissioners",
+      "cities",
+      "town",
+      "village",
+      "elementary school districts",
+      "school districts",
+      "joint school districts",
+      "specially chartered school districts",
+      "community college districts",
+      "school subdistricts",
+      "dormitory housing commissions",
+      "cooperative service agencies",
+      "authorities",
+      "aquifer recharge districts",
+      "ground water districts"
+    ],
+    "notes": "Idaho's local government structure includes county governments overseen by boards of county commissioners, and municipal governments primarily designated as \"cities,\" with no townships. The state recognizes various school districts, such as elementary, joint, specially chartered, and community college districts, alongside specific special districts like aquifer recharge and ground water districts. While terms like \"school subdistricts\" and \"cooperative service agencies\" exist, they are not counted as separate governmental units for Census purposes."
+  },
+  "IL": {
+    "census_terms": [
+      "county",
+      "counties",
+      "municipal government",
+      "municipal governments",
+      "municipality",
+      "municipalities",
+      "city",
+      "cities",
+      "village",
+      "villages",
+      "incorporated town",
+      "incorporated towns",
+      "town",
+      "towns",
+      "township government",
+      "township governments",
+      "township",
+      "townships",
+      "school district government",
+      "school districts",
+      "common school districts",
+      "community college districts",
+      "community high school districts",
+      "community unit school districts",
+      "non-high school districts",
+      "special charter districts",
+      "township high school districts"
+    ],
+    "notes": "Illinois is entirely covered by county governments, and also features subcounty general purpose governments comprising municipal (cities, villages, and incorporated towns) and township governments. Township governments exist in 84 of the 102 counties. The state recognizes various specific types of school districts as distinct governments, including common, community college, community high, community unit, non-high, special charter, and township high school districts."
   }
 }

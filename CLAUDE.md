@@ -15,6 +15,7 @@ See [PRD.md](PRD.md) for full requirements.
 | `config/urls.csv` | Seed URLs — a living document; new rows are appended over time. Only `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns are used by the pipeline. `RESOURCE_NAME` is a human label — **never use it for inference**. |
 | `config/keywords.csv` | Base vocabulary for relevance scoring. Used for all URLs. |
 | `config/state_definitions.json` | Per-state Census vocabulary generated from the ISD PDF. Used to extend `keywords.csv` for state-tagged URLs. **Do not hand-edit.** |
+| `config/state_abbrev.json` | Ordered list of all 51 state/DC abbreviations. Used by the setup script to track completion progress. |
 | `config/2022ISD.pdf` | Source document for `state_definitions.json`. Census Bureau publication G22-CG-ISD (339 pages, April 2024, reference year 2022). |
 
 ---
@@ -40,25 +41,29 @@ python setup/generate_state_definitions.py --llm ollama   # requires Ollama runn
 |---|---|---|
 | `--pdf PATH` | `config/2022ISD.pdf` | Path to the ISD PDF |
 | `--output PATH` | `config/state_definitions.json` | Output path |
-| `--force` | off | Overwrite existing output without prompting |
+| `--force` | off | Skip the confirmation prompt |
 | `--gemini-model NAME` | `gemini-2.5-flash` | Gemini model to use (Gemini backend only) |
-| `--states XX,YY` | all states | Comma-separated abbreviations to process; useful for testing (e.g. `AL,CA,TX`) |
+| `--states XX,YY` | *(auto-detect)* | Comma-separated abbreviations to process manually. Results are **merged** into existing output — unlisted states are preserved. |
+| `--max-requests N` | `20` | Max Gemini API calls per run when `--states` is omitted (each retry counts). Matches the free-tier RPD cap. |
 | `--ollama-url URL` | `http://localhost:11434` | Ollama API base URL |
 | `--ollama-model NAME` | `llama3.2` | Ollama model to use |
 
 **PDF library:** the script uses `pdfplumber` (not `pypdf`) for page-by-page text extraction.
 
-**Rate limits:** the Gemini free tier is ~15 RPM. The script sleeps 4 seconds between every request (success or failure) and retries up to 3 times on 429 errors, respecting the `retry_delay` hint in the response. If the daily quota is exhausted, wait until midnight UTC and re-run with `--force`.
+**Rate limits and multi-day batching:** the Gemini free tier is ~15 RPM but only **20 requests per day (RPD)** for Gemini 2.5 Flash. A full run requires 51 requests (one per state + DC), so it cannot finish in a single day on the free tier.
 
-**Testing with a subset of states:** use `--states` to limit processing to specific states. A full run takes ~4 minutes (51 states × 4 s sleep) and consumes the daily free-tier quota. Use a small subset to verify output format before committing to a full run:
+**When `--states` is omitted**, the script automatically determines which states still need processing by comparing `config/state_abbrev.json` against the current `config/state_definitions.json`. It considers a state "remaining" if it is absent, has empty `census_terms`, or has an error/parse-error note. It then prompts for confirmation and stops after `--max-requests` API calls (default 20). Just run the same command each day until complete:
 
 ```bash
-python setup/generate_state_definitions.py --llm gemini --states LA,AK --force
+# Each day — script picks up where it left off, stops at 20 requests
+python setup/generate_state_definitions.py --llm gemini
 ```
 
-Only the listed abbreviations will be written to the output JSON. Any other states already in the file are overwritten (the output is always a complete replacement, not a merge).
+The script sleeps 10 seconds between every request and retries up to 3 times on 429/503 errors (each retry counts against the daily limit). At the end of each run it logs how many states are still remaining.
 
-`config/state_definitions.json` has already been generated and committed. Re-run only when a new ISD edition is published (approximately every 5 years).
+**When `--states` is provided**, the script processes exactly those states with no request cap — useful for retrying a specific failed state (e.g. `--states AK`) or overriding the auto-detect order. Results are always merged into the existing file.
+
+`config/state_definitions.json` has already been partially generated. Re-run the script on successive days until all 51 states are complete. Re-run from scratch only when a new ISD edition is published (approximately every 5 years).
 
 ---
 
@@ -98,6 +103,7 @@ Each state section describes which types exist in that state, what they are loca
 - **Scorer is pluggable.** v1 uses keyword matching only. Future modes add sentence transformers (Mode 2), local Ollama LLM (Mode 3), or Gemini free tier (Mode 4) without changing the pipeline.
 - **Output is written incrementally** (one CSV row appended per completed URL) so runs are crash-safe and resumable via `--resume`. Use `--new-only` for delta runs when new URLs are added to `urls.csv`.
 - **robots.txt is fail-open.** If `robots.txt` is unreachable, a warning is logged and the crawl proceeds.
+- **Open data portal detection uses a two-pass approach.** After the initial page fetch, passive HTML and header signals are checked first (zero extra requests). An active API probe fires only when passive detection is inconclusive. Detected portals (Socrata/Tyler Technologies, CKAN, ArcGIS Hub) are routed to platform-specific adapters in `portals/` that enumerate the full dataset catalog via API rather than crawling rendered pages. See PRD §12 for adapter contracts and API endpoints.
 
 ---
 
@@ -110,6 +116,7 @@ Each state section describes which types exist in that state, what they are loca
 | 2 | `crawler/http_client.py`, `crawler/robots.py` | Not started |
 | 3 | `crawler/state_tagger.py` | Not started |
 | 4 | Page fetcher + JS detection + `crawler/playwright_client.py` | Not started |
+| 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Not started |
 | 5 | Depth crawler (`crawler/orchestrator.py`) | Not started |
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Not started |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Not started |
