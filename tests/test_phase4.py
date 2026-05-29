@@ -1,5 +1,5 @@
 """Unit tests for Phase 4 (T-40–T-42) and Phase 4B (T-43–T-48)."""
-import unittest
+import json
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -26,7 +26,6 @@ def make_response(
 def make_json_response(
     status: int, data: dict, headers: dict | None = None, url: str = "http://example.gov/"
 ) -> httpx.Response:
-    import json
     h = {"content-type": "application/json"}
     if headers:
         h.update(headers)
@@ -39,67 +38,65 @@ def make_json_response(
 # _visible_text helper
 # ---------------------------------------------------------------------------
 
-class TestVisibleText(unittest.TestCase):
+class TestVisibleText:
     def test_strips_tags(self):
         result = _visible_text("<h1>Hello</h1><p>World</p>")
-        self.assertIn("Hello", result)
-        self.assertIn("World", result)
-        self.assertNotIn("<h1>", result)
+        assert "Hello" in result
+        assert "World" in result
+        assert "<h1>" not in result
 
     def test_empty_html(self):
-        self.assertEqual(_visible_text("").strip(), "")
+        assert _visible_text("").strip() == ""
 
     def test_script_content_excluded(self):
         result = _visible_text("<html><body><script>var x=1;</script>Real text here</body></html>")
-        self.assertIn("Real text here", result)
-        self.assertNotIn("var x=1", result)
+        assert "Real text here" in result
+        assert "var x=1" not in result
 
 
 # ---------------------------------------------------------------------------
 # T-41: _is_js_heavy
 # ---------------------------------------------------------------------------
 
-class TestIsJsHeavy(unittest.TestCase):
+class TestIsJsHeavy:
     def _rich_html(self, extra: str = "") -> str:
-        return (
-            "<html><body>" + ("x " * 120) + extra + "</body></html>"
-        )
+        return "<html><body>" + ("x " * 120) + extra + "</body></html>"
 
     def test_short_visible_text_flagged(self):
-        self.assertTrue(_is_js_heavy("<html><body>Hi</body></html>", "text/html"))
+        assert _is_js_heavy("<html><body>Hi</body></html>", "text/html")
 
     def test_rich_page_not_flagged(self):
-        self.assertFalse(_is_js_heavy(self._rich_html(), "text/html"))
+        assert not _is_js_heavy(self._rich_html(), "text/html")
 
     def test_non_html_content_type_flagged(self):
-        self.assertTrue(_is_js_heavy(self._rich_html(), "application/json"))
+        assert _is_js_heavy(self._rich_html(), "application/json")
 
     def test_content_type_with_charset_still_works(self):
-        self.assertFalse(_is_js_heavy(self._rich_html(), "text/html; charset=utf-8"))
+        assert not _is_js_heavy(self._rich_html(), "text/html; charset=utf-8")
 
     def test_empty_content_type_treated_as_html(self):
-        self.assertTrue(_is_js_heavy("<html><body>short</body></html>", ""))
+        assert _is_js_heavy("<html><body>short</body></html>", "")
 
     def test_div_root_with_minimal_text_flagged(self):
         html = '<html><body><div id="root">loading...</div></body></html>'
-        self.assertTrue(_is_js_heavy(html, "text/html"))
+        assert _is_js_heavy(html, "text/html")
 
     def test_div_app_with_minimal_text_flagged(self):
         html = '<html><body><div id="app"></div></body></html>'
-        self.assertTrue(_is_js_heavy(html, "text/html"))
+        assert _is_js_heavy(html, "text/html")
 
     def test_over_200_chars_not_flagged(self):
         # "word " * 50 → ~249 visible chars after BS4 stripping — safely above threshold
         text = "word " * 50
         html = f"<html><body>{text}</body></html>"
-        self.assertFalse(_is_js_heavy(html, "text/html"))
+        assert not _is_js_heavy(html, "text/html")
 
 
 # ---------------------------------------------------------------------------
 # T-40: HttpClient.fetch_page
 # ---------------------------------------------------------------------------
 
-class TestFetchPage(unittest.TestCase):
+class TestFetchPage:
     def _make_client(self, response: httpx.Response) -> HttpClient:
         client = HttpClient(delay=0)
         client._client.get = MagicMock(return_value=response)
@@ -110,9 +107,9 @@ class TestFetchPage(unittest.TestCase):
         resp = make_response(200, rich, {"content-type": "text/html"})
         client = self._make_client(resp)
         html, final_url, status, rendered = client.fetch_page("http://example.gov/")
-        self.assertEqual(status, 200)
-        self.assertFalse(rendered)
-        self.assertIn("word", html)
+        assert status == 200
+        assert not rendered
+        assert "word" in html
 
     def test_non_200_never_triggers_playwright(self):
         resp = make_response(404, "Not found", {"content-type": "text/html"})
@@ -120,8 +117,8 @@ class TestFetchPage(unittest.TestCase):
         with patch("crawler.playwright_client.fetch_rendered") as mock_pw:
             html, _, status, rendered = client.fetch_page("http://example.gov/")
         mock_pw.assert_not_called()
-        self.assertEqual(status, 404)
-        self.assertFalse(rendered)
+        assert status == 404
+        assert not rendered
 
     def test_js_heavy_triggers_playwright(self):
         import crawler.playwright_client as pwc
@@ -132,8 +129,8 @@ class TestFetchPage(unittest.TestCase):
         with patch.object(pwc, "fetch_rendered", return_value=rendered_html):
             with patch("crawler.http_client._is_js_heavy", return_value=True):
                 html, _, status, rendered = client.fetch_page("http://example.gov/")
-        self.assertTrue(rendered)
-        self.assertEqual(html, rendered_html)
+        assert rendered
+        assert html == rendered_html
 
     def test_playwright_failure_falls_back_to_plain_html(self):
         import crawler.playwright_client as pwc
@@ -143,8 +140,8 @@ class TestFetchPage(unittest.TestCase):
         with patch.object(pwc, "fetch_rendered", side_effect=RuntimeError("browser crash")):
             with patch("crawler.http_client._is_js_heavy", return_value=True):
                 html, _, status, rendered = client.fetch_page("http://example.gov/")
-        self.assertFalse(rendered)
-        self.assertEqual(html, sparse)
+        assert not rendered
+        assert html == sparse
 
     def test_non_html_content_type_does_not_trigger_playwright(self):
         resp = make_response(200, "{}", {"content-type": "application/json"})
@@ -152,7 +149,7 @@ class TestFetchPage(unittest.TestCase):
         with patch("crawler.playwright_client.fetch_rendered") as mock_pw:
             _, _, status, rendered = client.fetch_page("http://example.gov/api")
         mock_pw.assert_not_called()
-        self.assertFalse(rendered)
+        assert not rendered
 
 
 # ---------------------------------------------------------------------------
@@ -190,82 +187,82 @@ PLAIN_HTML = """
 """
 
 
-class TestPortalDetectorPassive(unittest.TestCase):
+class TestPortalDetectorPassive:
     def _detector(self) -> PortalDetector:
         return PortalDetector(MagicMock())
 
     def test_socrata_footer_text(self):
         det = self._detector()
         platform, method = det.detect(SOCRATA_HTML, {}, "https://data.example.gov")
-        self.assertEqual(platform, "Socrata")
-        self.assertEqual(method, "passive")
+        assert platform == "Socrata"
+        assert method == "passive"
 
     def test_socrata_header(self):
         det = self._detector()
         headers = {"X-Socrata-RequestId": "abc123"}
         platform, method = det.detect(PLAIN_HTML, headers, "https://data.example.gov")
-        self.assertEqual(platform, "Socrata")
-        self.assertEqual(method, "passive")
+        assert platform == "Socrata"
+        assert method == "passive"
 
     def test_socrata_tyler_footer(self):
         html = PLAIN_HTML.replace("</body>", "<footer>Powered by Tyler Data &amp; Insights</footer></body>")
         det = self._detector()
         platform, _ = det.detect(html, {}, "https://data.example.gov")
-        self.assertEqual(platform, "Socrata")
+        assert platform == "Socrata"
 
     def test_ckan_meta_generator(self):
         det = self._detector()
         platform, method = det.detect(CKAN_HTML, {}, "https://data.example.gov")
-        self.assertEqual(platform, "CKAN")
-        self.assertEqual(method, "passive")
+        assert platform == "CKAN"
+        assert method == "passive"
 
     def test_ckan_js_snippet(self):
         html = "<html><body><script>ckan.module('map', function(){})</script></body></html>"
         det = self._detector()
         platform, _ = det.detect(html, {}, "https://data.example.gov")
-        self.assertEqual(platform, "CKAN")
+        assert platform == "CKAN"
 
     def test_ckan_body_class(self):
         html = '<html><body class="ckan-home"><p>Content</p></body></html>'
         det = self._detector()
         platform, _ = det.detect(html, {}, "https://data.example.gov")
-        self.assertEqual(platform, "CKAN")
+        assert platform == "CKAN"
 
     def test_arcgis_hub_component(self):
         det = self._detector()
         platform, method = det.detect(ARCGIS_HTML, {}, "https://opendata.example.gov")
-        self.assertEqual(platform, "ArcGIS Hub")
-        self.assertEqual(method, "passive")
+        assert platform == "ArcGIS Hub"
+        assert method == "passive"
 
     def test_arcgis_hub_domain(self):
         det = self._detector()
         platform, method = det.detect(PLAIN_HTML, {}, "https://opendata.dc.opendata.arcgis.com")
-        self.assertEqual(platform, "ArcGIS Hub")
-        self.assertEqual(method, "passive")
+        assert platform == "ArcGIS Hub"
+        assert method == "passive"
 
     def test_arcgis_script_domain(self):
         html = '<html><head><script src="https://js.arcgis.com/4.28/"></script></head></html>'
         det = self._detector()
         platform, _ = det.detect(html, {}, "https://gis.example.gov")
-        self.assertEqual(platform, "ArcGIS Hub")
+        assert platform == "ArcGIS Hub"
 
     def test_plain_page_returns_none(self):
         det = self._detector()
         platform, method = det.detect(PLAIN_HTML, {}, "https://finance.state.gov")
-        self.assertIsNone(platform)
-        self.assertEqual(method, "none")
+        assert platform is None
+        assert method == "none"
 
     def test_returns_none_on_empty_html(self):
         det = self._detector()
         platform, method = det.detect("", {}, "https://example.gov")
-        self.assertIsNone(platform)
+        assert platform is None
 
 
 # ---------------------------------------------------------------------------
 # PortalDetector active probe
 # ---------------------------------------------------------------------------
 
-class TestPortalDetectorActiveProbe(unittest.TestCase):
+class TestPortalDetectorActiveProbe:
     def _detector_with_probe_response(self, platform_confirmed: str, probe_data: dict):
         mock_client = MagicMock()
         resp = make_json_response(200, probe_data)
@@ -288,8 +285,8 @@ class TestPortalDetectorActiveProbe(unittest.TestCase):
         mock_client.get.side_effect = probe_side_effect
         det = PortalDetector(mock_client)
         platform, method = det.detect(ambiguous_html, {}, "https://data.example.gov")
-        self.assertIn(platform, ("Socrata", "CKAN"))
-        self.assertEqual(method, "probe")
+        assert platform in ("Socrata", "CKAN")
+        assert method == "probe"
 
     def test_active_probe_failure_returns_none(self):
         # Ambiguous signals but all probes fail
@@ -298,14 +295,14 @@ class TestPortalDetectorActiveProbe(unittest.TestCase):
         mock_client.get.return_value = make_response(404)
         det = PortalDetector(mock_client)
         platform, method = det.detect(ambiguous, {}, "https://data.example.gov")
-        self.assertIsNone(platform)
+        assert platform is None
 
     def test_single_passive_match_skips_probe(self):
         mock_client = MagicMock()
         det = PortalDetector(mock_client)
         platform, method = det.detect(SOCRATA_HTML, {}, "https://data.example.gov")
-        self.assertEqual(platform, "Socrata")
-        self.assertEqual(method, "passive")
+        assert platform == "Socrata"
+        assert method == "passive"
         mock_client.get.assert_not_called()
 
 
@@ -313,7 +310,7 @@ class TestPortalDetectorActiveProbe(unittest.TestCase):
 # T-46: SocrataAdapter
 # ---------------------------------------------------------------------------
 
-class TestSocrataAdapter(unittest.TestCase):
+class TestSocrataAdapter:
     def _mock_client(self, pages: list[dict]):
         """pages is a list of catalog API response dicts (one per page request)."""
         mock_client = MagicMock()
@@ -334,9 +331,9 @@ class TestSocrataAdapter(unittest.TestCase):
         client = self._mock_client([{"results": [ds]}])
         adapter = SocrataAdapter("https://data.ex.gov", frozenset({"county", "budget"}), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 1)
-        self.assertGreater(result["relevance_score"], 0)
-        self.assertIn("https://data.ex.gov/d/abc", result["top_dataset_urls"])
+        assert result["portal_dataset_count"] == 1
+        assert result["relevance_score"] > 0
+        assert "https://data.ex.gov/d/abc" in result["top_dataset_urls"]
 
     def test_pagination_stops_when_page_smaller_than_limit(self):
         ds = self._make_dataset("DS1", "", [], "https://ex.gov/d/1")
@@ -345,7 +342,7 @@ class TestSocrataAdapter(unittest.TestCase):
         client = self._mock_client([{"results": [ds]}])
         adapter = SocrataAdapter("https://ex.gov", frozenset(), client)
         adapter.run()
-        self.assertEqual(client.get.call_count, 1)
+        assert client.get.call_count == 1
 
     def test_pagination_continues_on_full_page(self):
         page1 = {"results": [self._make_dataset(f"D{i}", "", [], f"http://e.gov/{i}") for i in range(100)]}
@@ -353,22 +350,22 @@ class TestSocrataAdapter(unittest.TestCase):
         client = self._mock_client([page1, page2])
         adapter = SocrataAdapter("https://ex.gov", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 101)
-        self.assertEqual(client.get.call_count, 2)
+        assert result["portal_dataset_count"] == 101
+        assert client.get.call_count == 2
 
     def test_http_error_stops_pagination_gracefully(self):
         client = MagicMock()
         client.get.return_value = make_response(500)
         adapter = SocrataAdapter("https://ex.gov", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 0)
+        assert result["portal_dataset_count"] == 0
 
     def test_zero_keywords_gives_zero_score(self):
         ds = self._make_dataset("County Budget", "All about counties", ["county"], "http://e.gov/d/1")
         client = self._mock_client([{"results": [ds]}])
         adapter = SocrataAdapter("https://ex.gov", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["relevance_score"], 0)
+        assert result["relevance_score"] == 0
 
     def test_top_urls_capped_at_10(self):
         datasets = [
@@ -378,14 +375,14 @@ class TestSocrataAdapter(unittest.TestCase):
         client = self._mock_client([{"results": datasets}])
         adapter = SocrataAdapter("https://ex.gov", frozenset({"county"}), client)
         result = adapter.run()
-        self.assertLessEqual(len(result["top_dataset_urls"]), 10)
+        assert len(result["top_dataset_urls"]) <= 10
 
 
 # ---------------------------------------------------------------------------
 # T-47: CKANAdapter
 # ---------------------------------------------------------------------------
 
-class TestCKANAdapter(unittest.TestCase):
+class TestCKANAdapter:
     def _mock_client(self, pages: list[dict]):
         mock_client = MagicMock()
         mock_client.get.side_effect = [make_json_response(200, p) for p in pages]
@@ -405,15 +402,15 @@ class TestCKANAdapter(unittest.TestCase):
         client = self._mock_client([page])
         adapter = CKANAdapter("https://data.gov", frozenset({"school", "district"}), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 1)
-        self.assertGreater(result["relevance_score"], 0)
+        assert result["portal_dataset_count"] == 1
+        assert result["relevance_score"] > 0
 
     def test_stops_on_success_false(self):
         page = {"success": False, "result": {"results": []}}
         client = self._mock_client([page])
         adapter = CKANAdapter("https://data.gov", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 0)
+        assert result["portal_dataset_count"] == 0
 
     def test_pagination(self):
         page1 = {"success": True, "result": {"results": [
@@ -425,7 +422,7 @@ class TestCKANAdapter(unittest.TestCase):
         client = self._mock_client([page1, page2])
         adapter = CKANAdapter("https://d.gov", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 101)
+        assert result["portal_dataset_count"] == 101
 
     def test_matched_keywords_union_across_datasets(self):
         ds1 = self._make_dataset("Counties", "county data", ["county"], "http://d.gov/1")
@@ -434,15 +431,15 @@ class TestCKANAdapter(unittest.TestCase):
         client = self._mock_client([page])
         adapter = CKANAdapter("https://d.gov", frozenset({"county", "township"}), client)
         result = adapter.run()
-        self.assertIn("county", result["matched_keywords"])
-        self.assertIn("township", result["matched_keywords"])
+        assert "county" in result["matched_keywords"]
+        assert "township" in result["matched_keywords"]
 
 
 # ---------------------------------------------------------------------------
 # T-48: ArcGISHubAdapter
 # ---------------------------------------------------------------------------
 
-class TestArcGISHubAdapter(unittest.TestCase):
+class TestArcGISHubAdapter:
     def _mock_client(self, pages: list[dict]):
         mock_client = MagicMock()
         mock_client.get.side_effect = [make_json_response(200, p) for p in pages]
@@ -464,8 +461,8 @@ class TestArcGISHubAdapter(unittest.TestCase):
         client = self._mock_client([page])
         adapter = ArcGISHubAdapter("https://hub.ex.com", frozenset({"municipal"}), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 1)
-        self.assertGreater(result["relevance_score"], 0)
+        assert result["portal_dataset_count"] == 1
+        assert result["relevance_score"] > 0
 
     def test_pagination_follows_meta_next(self):
         page1 = {
@@ -479,60 +476,56 @@ class TestArcGISHubAdapter(unittest.TestCase):
         client = self._mock_client([page1, page2])
         adapter = ArcGISHubAdapter("https://e.com", frozenset(), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 101)
+        assert result["portal_dataset_count"] == 101
 
     def test_empty_catalog(self):
         page = {"data": [], "meta": {}}
         client = self._mock_client([page])
         adapter = ArcGISHubAdapter("https://hub.ex.com", frozenset({"county"}), client)
         result = adapter.run()
-        self.assertEqual(result["portal_dataset_count"], 0)
-        self.assertEqual(result["relevance_score"], 0)
+        assert result["portal_dataset_count"] == 0
+        assert result["relevance_score"] == 0
 
 
 # ---------------------------------------------------------------------------
 # portals.score_metadata
 # ---------------------------------------------------------------------------
 
-class TestScoreMetadata(unittest.TestCase):
+class TestScoreMetadata:
     def test_exact_keyword_match(self):
         score, matched = score_metadata("county budget report", frozenset({"county", "budget"}))
-        self.assertEqual(len(matched), 2)
-        self.assertGreater(score, 0)
+        assert len(matched) == 2
+        assert score > 0
 
     def test_no_match_gives_zero(self):
         score, matched = score_metadata("sports and recreation", frozenset({"county", "budget"}))
-        self.assertEqual(score, 0)
-        self.assertEqual(matched, [])
+        assert score == 0
+        assert matched == []
 
     def test_empty_keywords_gives_zero(self):
         score, matched = score_metadata("county data", frozenset())
-        self.assertEqual(score, 0)
+        assert score == 0
 
     def test_case_insensitive(self):
         score, matched = score_metadata("COUNTY budget", frozenset({"county"}))
-        self.assertGreater(score, 0)
-        self.assertIn("county", matched)
+        assert score > 0
+        assert "county" in matched
 
     def test_whole_word_boundary(self):
         # "county" in "countywide" should NOT match
         score, _ = score_metadata("countywide analysis", frozenset({"county"}))
-        self.assertEqual(score, 0)
+        assert score == 0
 
     def test_score_capped_at_100(self):
         keywords = frozenset({"a", "b"})
         score, _ = score_metadata("a b a b a b", keywords)
-        self.assertLessEqual(score, 100)
+        assert score <= 100
 
     def test_diacritic_normalization(self):
         # "école" should match "ecole" after diacritic stripping
         score, matched = score_metadata("école primaire", frozenset({"ecole"}))
-        self.assertGreater(score, 0)
+        assert score > 0
 
     def test_matched_keywords_sorted(self):
         _, matched = score_metadata("county municipal township", frozenset({"township", "county", "municipal"}))
-        self.assertEqual(matched, sorted(matched))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert matched == sorted(matched)

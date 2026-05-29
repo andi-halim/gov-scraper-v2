@@ -11,7 +11,8 @@ Covered URL types:
   5. https://opendata.dc.gov      — ArcGIS Hub             (expect ArcGIS Hub detection)
 """
 import os
-import unittest
+import pytest
+from unittest.mock import MagicMock
 
 import httpx
 
@@ -28,84 +29,82 @@ def _get(url: str) -> httpx.Response:
         return client.get(url)
 
 
-@unittest.skipIf(SKIP, SKIP_REASON)
-class TestMichiganGov(unittest.TestCase):
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class TestMichiganGov:
     """michigan.gov — plain state government homepage."""
 
     URL = "https://michigan.gov"
 
-    def setUp(self):
+    def setup_method(self):
         self.resp = _get(self.URL)
 
     def test_page_is_active(self):
-        self.assertEqual(self.resp.status_code, 200)
+        assert self.resp.status_code == 200
 
     def test_state_tagger_returns_MI(self):
         from crawler.state_tagger import StateTagger
         tagger = StateTagger()
         state = tagger.tag(self.URL, self.resp.text)
-        self.assertEqual(state, "MI")
+        assert state == "MI"
 
     def test_page_has_substantial_content(self):
         from crawler.http_client import _visible_text
         visible = _visible_text(self.resp.text)
-        self.assertGreater(len(visible), 200)
+        assert len(visible) > 200
 
     def test_html_content_type(self):
         ct = self.resp.headers.get("content-type", "")
-        self.assertIn("text/html", ct)
+        assert "text/html" in ct
 
 
-@unittest.skipIf(SKIP, SKIP_REASON)
-class TestCensusGovFederal(unittest.TestCase):
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class TestCensusGovFederal:
     """census.gov — federal agency; should tag as FEDERAL."""
 
     URL = "https://census.gov"
 
-    def setUp(self):
+    def setup_method(self):
         self.resp = _get(self.URL)
 
     def test_page_is_active(self):
-        self.assertEqual(self.resp.status_code, 200)
+        assert self.resp.status_code == 200
 
     def test_state_tagger_returns_FEDERAL(self):
         from crawler.state_tagger import StateTagger
         tagger = StateTagger()
         state = tagger.tag(self.URL, self.resp.text)
-        self.assertEqual(state, "FEDERAL")
+        assert state == "FEDERAL"
 
     def test_not_detected_as_portal(self):
         from crawler.portal_detector import PortalDetector
-        from unittest.mock import MagicMock
         det = PortalDetector(MagicMock())
         platform, _ = det.detect(self.resp.text, dict(self.resp.headers), self.URL)
-        self.assertIsNone(platform)
+        assert platform is None
 
 
-@unittest.skipIf(SKIP, SKIP_REASON)
-class TestChicagoSocrataPortal(unittest.TestCase):
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class TestChicagoSocrataPortal:
     """data.cityofchicago.org — known Socrata open data portal."""
 
     URL = "https://data.cityofchicago.org"
 
-    def setUp(self):
+    def setup_method(self):
         self.resp = _get(self.URL)
 
     def test_page_is_active(self):
-        self.assertEqual(self.resp.status_code, 200)
+        assert self.resp.status_code == 200
 
     def test_detected_as_socrata(self):
         from crawler.portal_detector import PortalDetector
-        from unittest.mock import MagicMock
         det = PortalDetector(MagicMock())
         platform, method = det.detect(self.resp.text, dict(self.resp.headers), self.URL)
-        self.assertEqual(platform, "Socrata")
+        assert platform == "Socrata"
 
     def test_catalog_api_reachable(self):
         resp = _get(f"{self.URL}/api/catalog/v1?limit=1")
-        self.assertEqual(resp.status_code, 200)
+        assert resp.status_code == 200
         data = resp.json()
-        self.assertIn("results", data)
+        assert "results" in data
 
     def test_socrata_adapter_returns_datasets(self):
         from crawler.http_client import HttpClient
@@ -113,35 +112,34 @@ class TestChicagoSocrataPortal(unittest.TestCase):
         with HttpClient(delay=0) as client:
             adapter = SocrataAdapter(self.URL, frozenset({"county", "budget", "district"}), client)
             result = adapter.run()
-        self.assertGreater(result["portal_dataset_count"], 0)
-        self.assertIsInstance(result["portal_relevant_count"], int)
-        self.assertIsInstance(result["top_dataset_urls"], list)
+        assert result["portal_dataset_count"] > 0
+        assert isinstance(result["portal_relevant_count"], int)
+        assert isinstance(result["top_dataset_urls"], list)
 
 
-@unittest.skipIf(SKIP, SKIP_REASON)
-class TestDataGovCKAN(unittest.TestCase):
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class TestDataGovCKAN:
     """catalog.data.gov — federal CKAN open data catalog."""
 
     URL = "https://catalog.data.gov"
 
-    def setUp(self):
+    def setup_method(self):
         self.resp = _get(self.URL)
 
     def test_page_is_active(self):
-        self.assertEqual(self.resp.status_code, 200)
+        assert self.resp.status_code == 200
 
     def test_detected_as_ckan(self):
         from crawler.portal_detector import PortalDetector
-        from unittest.mock import MagicMock
         det = PortalDetector(MagicMock())
         platform, method = det.detect(self.resp.text, dict(self.resp.headers), self.URL)
-        self.assertEqual(platform, "CKAN")
+        assert platform == "CKAN"
 
     def test_ckan_site_read_api_reachable(self):
         resp = _get(f"{self.URL}/api/3/action/site_read")
-        self.assertEqual(resp.status_code, 200)
+        assert resp.status_code == 200
         data = resp.json()
-        self.assertTrue(data.get("success"))
+        assert data.get("success")
 
     def test_ckan_adapter_returns_datasets(self):
         from crawler.http_client import HttpClient
@@ -149,36 +147,31 @@ class TestDataGovCKAN(unittest.TestCase):
         with HttpClient(delay=0) as client:
             adapter = CKANAdapter(self.URL, frozenset({"county", "municipal", "district"}), client)
             result = adapter.run()
-        self.assertGreater(result["portal_dataset_count"], 0)
+        assert result["portal_dataset_count"] > 0
 
 
-@unittest.skipIf(SKIP, SKIP_REASON)
-class TestDCOpenDataArcGISHub(unittest.TestCase):
+@pytest.mark.skipif(SKIP, reason=SKIP_REASON)
+class TestDCOpenDataArcGISHub:
     """opendata.dc.gov — DC's ArcGIS Hub open data portal."""
 
     URL = "https://opendata.dc.gov"
 
-    def setUp(self):
+    def setup_method(self):
         self.resp = _get(self.URL)
 
     def test_page_is_active(self):
-        self.assertEqual(self.resp.status_code, 200)
+        assert self.resp.status_code == 200
 
     def test_detected_as_arcgis_hub(self):
         from crawler.portal_detector import PortalDetector
-        from unittest.mock import MagicMock
         det = PortalDetector(MagicMock())
         final_url = str(self.resp.url)
         platform, method = det.detect(self.resp.text, dict(self.resp.headers), final_url)
-        self.assertEqual(platform, "ArcGIS Hub")
+        assert platform == "ArcGIS Hub"
 
     def test_state_tagger_resolves_to_DC(self):
         from crawler.state_tagger import StateTagger
         tagger = StateTagger()
         final_url = str(self.resp.url)
         state = tagger.tag(final_url, self.resp.text)
-        self.assertIn(state, ("DC", "NATIONAL"))  # DC or fallback if domain pattern doesn't match
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert state in ("DC", "NATIONAL")  # DC or fallback if domain pattern doesn't match
