@@ -4,7 +4,7 @@
 
 `gov-scraper-v2` crawls a curated and continuously growing list of US government-related URLs (from `config/urls.csv`) to assess each site's viability as a source of data consistent with the Census of Governments Individual State Descriptions. New URLs are added to the list over time; the pipeline handles any list size and supports delta runs that process only newly added URLs. For every URL it reports: whether the site is active, a 0–100 relevance score against Census vocabulary, and any downloadable datasets detected. Output is a single CSV. The tool must run entirely free — no paid APIs or services.
 
-See [PRD.md](PRD.md) for full requirements.
+See [PRD.md](PRD.md) for full requirements. See [TASKS.md](TASKS.md) for full breakdown of individual steps. See [NOTES.md](NOTES.md) for additional information regarding implementation notes for each phase.
 
 ---
 
@@ -80,6 +80,17 @@ Output is written incrementally to `output/<YYYY-MM-DD>/results.csv`. Each dated
 
 ---
 
+## Running tests
+
+```bash
+python -m pytest tests/                          # unit tests only (fast, no network)
+RUN_INTEGRATION_TESTS=1 python -m pytest tests/test_integration_urls.py -v
+```
+
+Integration tests hit five live URLs (michigan.gov, census.gov, data.cityofchicago.org, catalog.data.gov, opendata.dc.gov) and are skipped by default.
+
+---
+
 ## The Census of Governments ISD — what you need to know
 
 The **Individual State Descriptions** is the Census Bureau's reference document defining what counts as each of the five local government unit types in every US state:
@@ -104,24 +115,6 @@ Each state section describes which types exist in that state, what they are loca
 - **Output is written incrementally** (one CSV row appended per completed URL) so runs are crash-safe and resumable via `--resume`. Use `--new-only` for delta runs when new URLs are added to `urls.csv`.
 - **robots.txt is fail-open.** If `robots.txt` is unreachable, a warning is logged and the crawl proceeds.
 - **Open data portal detection uses a two-pass approach.** After the initial page fetch, passive HTML and header signals are checked first (zero extra requests). An active API probe fires only when passive detection is inconclusive. Detected portals (Socrata/Tyler Technologies, CKAN, ArcGIS Hub) are routed to platform-specific adapters in `portals/` that enumerate the full dataset catalog via API rather than crawling rendered pages. See PRD §12 for adapter contracts and API endpoints.
+- **JS-heavy pages are re-fetched with Playwright.** `crawler/http_client.py::_is_js_heavy()` flags a page when visible text < 200 chars or content-type is non-HTML; `fetch_page()` then calls `crawler/playwright_client.py::fetch_rendered()` for a headless Chromium render. Playwright failures fall back to plain HTML silently.
+- **`portals/__init__.py` owns the shared `score_metadata()` helper.** All three portal adapters import it. It uses NFC normalization + diacritic stripping + whole-word regex matching and returns `(score 0–100, sorted matched keywords)`.
 
----
-
-## Implementation status
-
-| Phase | Description | Status |
-|---|---|---|
-| 0 | Scaffolding (`requirements.txt`, `__init__.py` files) | Done |
-| 1 | `setup/generate_state_definitions.py` + `config/state_definitions.json` | Done |
-| 2 | `crawler/http_client.py`, `crawler/robots.py` | Not started |
-| 3 | `crawler/state_tagger.py` | Not started |
-| 4 | Page fetcher + JS detection + `crawler/playwright_client.py` | Not started |
-| 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Not started |
-| 5 | Depth crawler (`crawler/orchestrator.py`) | Not started |
-| 6 | Dataset detector (`crawler/dataset_detector.py`) | Not started |
-| 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Not started |
-| 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Not started |
-| 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
-| 10 | `run.py` entrypoint | Not started |
-
-**Current state:** only the one-time PDF setup script exists. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.

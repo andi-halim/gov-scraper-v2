@@ -30,7 +30,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Low-level network layer. All other crawler components depend on this.
 
-- [ ] **T-20** `crawler/http_client.py` — `httpx.Client` wrapper with:
+- [x] **T-20** `crawler/http_client.py` — `httpx.Client` wrapper with:
   - `User-Agent: GovScraper/2.0 (contact: andihalim00@gmail.com)` on every request
   - Per-domain rate limiting: enforce minimum 2-second gap between consecutive requests to the same registered domain
   - Automatic redirect following (httpx default)
@@ -38,7 +38,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   - Configurable `--delay` override passed in at construction time
   - Network-level timeout (10 s connect, 30 s read)
 
-- [ ] **T-21** `crawler/robots.py` — `RobotsChecker` class:
+- [x] **T-21** `crawler/robots.py` — `RobotsChecker` class:
   - Fetch and parse `robots.txt` for a domain before the first request
   - Cache parsed result per registered domain for the lifetime of the run
   - Return `(allowed: bool, status: str)` where `status` is `"allowed"`, `"disallowed"`, or `"unavailable"`
@@ -67,12 +67,12 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Retrieves rendered page content; Playwright fallback for JS-heavy pages.
 
-- [ ] **T-40** `crawler/http_client.py` (extend T-20) — `fetch_page(url)` method: issues GET, returns `(html: str, final_url: str, http_status: int, js_rendered: bool)`
-- [ ] **T-41** JS-heavy detection logic: flag a page as JS-heavy if any of:
+- [x] **T-40** `crawler/http_client.py` (extend T-20) — `fetch_page(url)` method: issues GET, returns `(html: str, final_url: str, http_status: int, js_rendered: bool)`
+- [x] **T-41** JS-heavy detection logic: flag a page as JS-heavy if any of:
   - Body contains `<div id="root">` or `<div id="app">` with fewer than 200 characters of visible text after tag stripping
   - `Content-Type` is not `text/html`
   - Stripped text length < 200 characters
-- [ ] **T-42** `crawler/playwright_client.py` — async Playwright wrapper:
+- [x] **T-42** `crawler/playwright_client.py` — async Playwright wrapper:
   - Launch headless Chromium
   - Navigate to URL, wait for `networkidle`
   - Return rendered `document.body.innerHTML`
@@ -84,29 +84,29 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Identifies whether a seed URL is a known open data platform and routes it to a platform-specific API adapter rather than the generic depth crawler. Runs after the initial page fetch (Phase 4) and before the depth crawler (Phase 5).
 
-- [ ] **T-43** `crawler/portal_detector.py` — `PortalDetector` class:
+- [x] **T-43** `crawler/portal_detector.py` — `PortalDetector` class:
   - `detect(html: str, headers: dict, base_url: str) -> tuple[str | None, str]`
   - Returns `(platform, method)` where `platform` is `"Socrata"`, `"CKAN"`, `"ArcGIS Hub"`, or `None`; `method` is `"passive"`, `"probe"`, or `"none"`
   - Pass 1: scan HTML + response headers for per-platform passive signals (PRD FR-12)
   - Pass 2: if Pass 1 is inconclusive, fire a single GET probe per candidate platform using the rate-limited client from T-20; use probe endpoints from PRD FR-12 table
   - If passive signals match multiple platforms, active probe result takes precedence
 
-- [ ] **T-44** Passive signal constants: define per-platform HTML and header signatures as module-level constants in `portal_detector.py`; do not hardcode literal strings inline in detection logic
+- [x] **T-44** Passive signal constants: define per-platform HTML and header signatures as module-level constants in `portal_detector.py`; do not hardcode literal strings inline in detection logic
 
-- [ ] **T-45** `portals/` package scaffolding: `portals/__init__.py`
+- [x] **T-45** `portals/` package scaffolding: `portals/__init__.py`
 
-- [ ] **T-46** `portals/socrata.py` — `SocrataAdapter(base_url, effective_keywords, http_client)`:
+- [x] **T-46** `portals/socrata.py` — `SocrataAdapter(base_url, effective_keywords, http_client)`:
   - Paginate `GET /api/catalog/v1?limit=100&offset=N` until all datasets retrieved
   - Per dataset: extract `resource.name`, `resource.description`, `classification.domain_tags`, `resource.type`, `permalink`
   - Score each dataset's concatenated metadata (title + description + tags) using the same weighted matcher as T-71
   - Return the shared adapter contract dict (PRD §12)
 
-- [ ] **T-47** `portals/ckan.py` — `CKANAdapter(base_url, effective_keywords, http_client)`:
+- [x] **T-47** `portals/ckan.py` — `CKANAdapter(base_url, effective_keywords, http_client)`:
   - Paginate `GET /api/3/action/package_search?rows=100&start=N` to retrieve all metadata in batches
   - Per dataset: extract `title`, `notes`, `tags[].name`, `resources[].format`, `resources[].url`
   - Score metadata; return adapter contract dict
 
-- [ ] **T-48** `portals/arcgis_hub.py` — `ArcGISHubAdapter(base_url, effective_keywords, http_client)`:
+- [x] **T-48** `portals/arcgis_hub.py` — `ArcGISHubAdapter(base_url, effective_keywords, http_client)`:
   - Paginate `GET /api/v3/datasets?page[size]=100&page[number]=N` until complete
   - Per dataset: extract `attributes.name`, `attributes.description`, `attributes.tags`, `attributes.access.urls.download`
   - Score metadata; return adapter contract dict
