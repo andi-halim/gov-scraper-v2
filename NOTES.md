@@ -8,14 +8,14 @@
 | 3 | `crawler/state_tagger.py` | Done |
 | 4 | Page fetcher + JS detection + `crawler/playwright_client.py` | Done |
 | 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Done |
-| 5 | Depth crawler (`crawler/orchestrator.py`) | Not started |
-| 6 | Dataset detector (`crawler/dataset_detector.py`) | Not started |
+| 5 | Depth crawler (`crawler/orchestrator.py`) | Done |
+| 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Not started |
 | 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Not started |
 | 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
 | 10 | `run.py` entrypoint | Not started |
 
-**Current state:** the one-time PDF setup script, HTTP/robots layer, and state tagger exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
+**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, and dataset detector exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
 
 ### Phase 2 implementation notes
 
@@ -30,6 +30,14 @@
 - Caches parsed `RobotFileParser` per netloc for the run lifetime. A failed or missing robots.txt is cached as `None` — no refetch on subsequent calls to the same host.
 - `is_allowed(url) -> (bool, str)` returns status `"allowed"`, `"disallowed"`, or `"unavailable"` (fail-open on any fetch error including 404).
 - Passes agent name `"GovScraper"` to `RobotFileParser.can_fetch()`, which matches both `User-agent: GovScraper` and `User-agent: *` rules with GovScraper-specific rules taking precedence.
+
+### Known site-specific behaviour
+
+**`catalog.data.gov`** — As of May 2026, catalog.data.gov has migrated away from a standard CKAN deployment to a custom Next.js SPA. All CKAN API endpoints (`/api/3/action/*`) return 404. The only remaining CKAN passive signal is internal `/dataset` links in the HTML, which the portal detector correctly ignores (too generic). When the crawler processes this URL, passive detection will not fire and it will be handled as a plain site via the standard depth crawler.
+
+**`michigan.gov`** — Sits behind Akamai CDN with bot detection enabled. Plain HTTP requests using `GovScraper/2.0` receive a 403 regardless of Accept headers; only real Chromium (Playwright) gets through. The site's `robots.txt` (accessible at `www.michigan.gov/robots.txt`) permits `*` for most paths — the block is at the CDN layer, not the application layer. See Phase 4 notes on Playwright fallback for the recommended fix.
+
+---
 
 ### Phase 4 implementation notes
 
@@ -52,6 +60,28 @@
 - `portals/__init__.py` exposes `score_metadata(text, keywords)` — the shared scoring function for all three adapters. Normalizes via NFC + diacritic stripping before whole-word regex match. Returns `(score 0–100, sorted matched keyword list)`.
 - All three adapters (`SocrataAdapter`, `CKANAdapter`, `ArcGISHubAdapter`) implement `run() -> dict` returning the shared contract from PRD §12. Pagination stops as soon as a page smaller than `_PAGE_SIZE` (100) is returned, or when no `meta.next` link is present (ArcGIS Hub).
 - Errors during pagination are caught, logged, and stop further requests — partial results are still aggregated and returned.
+
+### Phase 5 implementation notes
+
+**`crawler/orchestrator.py` — `crawl_url(seed_url, http_client, depth)`**
+- BFS over `(url, hop_depth)` pairs using `collections.deque`. Visited URLs are tracked in a set keyed on the normalized URL string (fragment stripped) to prevent re-fetching.
+- `_registered_domain()` uses `tldextract` to extract the `domain.suffix` pair — same logic as `HttpClient._registered_domain()`. This means subdomains of the same site (e.g. `data.michigan.gov` and `www.michigan.gov`) are treated as internal links, matching the PRD intent.
+- `_extract_links()` resolves relative hrefs via `urllib.parse.urljoin` against `final_url` (not `seed_url`) so redirected pages expand links correctly. Fragments are stripped; `javascript:`, `mailto:`, `tel:`, and bare `#` hrefs are discarded.
+- Rate limiting is already handled by `HttpClient.get()` — no extra delay logic is needed in the BFS loop.
+- `crawl_depth_reached` is initialized to 0 and only advances when a page at hop > current max returns HTTP 200. A seed failure (non-200 or exception) leaves it at 0, same as a seed-only successful crawl — both are valid "depth 0" states per the output spec.
+- Network errors during hop fetches are caught, logged, and appended as `(url, "", 0, False)` so the pages list always has one entry per attempted URL; the caller can inspect `http_status == 0` to distinguish network errors from server errors.
+
+### Phase 6 implementation notes
+
+**`crawler/dataset_detector.py` — `detect_datasets(pages, http_client=None)`**
+- Accepts `list[PageResult]` (same tuple type returned by `crawl_url`). Pages with non-200 status or empty HTML are silently skipped.
+- `_EXT_RE` uses a negative-alphanumeric lookahead `(?=[^a-zA-Z0-9]|$)` rather than a fixed set like `[?&#]` so it correctly matches extensions inside quoted `Content-Disposition` filenames (e.g. `filename="data.csv"`) and in query values (e.g. `?file=report.xlsx`).
+- Extension detection checks the URL path component first, then the query string — this catches both `/files/data.csv?v=2` and `/dl?file=report.csv`.
+- HEAD probes (`_check_content_disposition`) fire only for URLs whose path matches `_DOWNLOAD_PATH_RE` (contains `/download`, `/export`, `/getfile`, etc.) to avoid hammering servers with HEAD requests for every ordinary link. Rate limiting is handled by `HttpClient.head()`.
+- When `Content-Disposition: attachment` is present but no recognised extension appears in the filename, the URL is added to `dataset_urls` but contributes nothing to `dataset_formats` (empty-string sentinel from `_check_content_disposition`).
+- `HttpClient.head()` was added (T-61): same rate-limiting as `get()`, no retry logic, no body download.
+
+---
 
 ### Phase 3 implementation notes
 

@@ -58,3 +58,25 @@ for r in out_rows:
 | https://wisconsinlandwater.org/... | Wisconsin Land & Water Conservation Association | NO | WI |
 
 \* `alconservationdistricts.gov` stays NATIONAL — only the abbreviation `al` appears in the domain, not the full name `alabama`. Will resolve correctly via Priority 4 (page content) once the page fetcher is built in Phase 4.
+
+---
+
+## 2026-06-01
+
+### Phase 5 — Depth Crawler implementation and tests
+
+Created `crawler/orchestrator.py` (T-50–T-52) and `tests/test_phase5.py`.
+
+```bash
+python -m pytest tests/test_phase5.py -v
+```
+
+**Result:** 33 passed in 1.30s
+
+**Full suite (unit tests only):**
+
+```bash
+python -m pytest tests/ --ignore=tests/test_integration_urls.py
+```
+
+**Result:** 120 passed in 0.88s

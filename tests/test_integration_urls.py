@@ -118,10 +118,10 @@ class TestChicagoSocrataPortal:
 
 
 @pytest.mark.skipif(SKIP, reason=SKIP_REASON)
-class TestDataGovCKAN:
-    """catalog.data.gov — federal CKAN open data catalog."""
+class TestDemoCKAN:
+    """demo.ckan.org — CKAN project's official public demo instance."""
 
-    URL = "https://catalog.data.gov"
+    URL = "https://demo.ckan.org"
 
     def setup_method(self):
         self.resp = _get(self.URL)
@@ -135,8 +135,8 @@ class TestDataGovCKAN:
         platform, method = det.detect(self.resp.text, dict(self.resp.headers), self.URL)
         assert platform == "CKAN"
 
-    def test_ckan_site_read_api_reachable(self):
-        resp = _get(f"{self.URL}/api/3/action/site_read")
+    def test_ckan_status_show_api_reachable(self):
+        resp = _get(f"{self.URL}/api/3/action/status_show")
         assert resp.status_code == 200
         data = resp.json()
         assert data.get("success")
@@ -145,7 +145,7 @@ class TestDataGovCKAN:
         from crawler.http_client import HttpClient
         from portals.ckan import CKANAdapter
         with HttpClient(delay=0) as client:
-            adapter = CKANAdapter(self.URL, frozenset({"county", "municipal", "district"}), client)
+            adapter = CKANAdapter(self.URL, frozenset({"country", "population", "data"}), client)
             result = adapter.run()
         assert result["portal_dataset_count"] > 0
 

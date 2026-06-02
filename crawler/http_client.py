@@ -53,7 +53,8 @@ class HttpClient:
             follow_redirects=True,
             timeout=httpx.Timeout(_CONNECT_TIMEOUT, read=_READ_TIMEOUT),
         )
-
+    
+    # Convert below function into a util at Phase 10
     def _registered_domain(self, url: str) -> str:
         ext = tldextract.extract(url)
         if ext.suffix:
@@ -91,6 +92,13 @@ class HttpClient:
                 return last_response
 
         return last_response  # type: ignore[return-value]  # exhausted retries
+
+    def head(self, url: str, **kwargs) -> httpx.Response:
+        """T-61: Issue a HEAD request with rate limiting. No response body is downloaded."""
+        domain = self._registered_domain(url)
+        self._wait_for_rate_limit(domain)
+        self._last_request[domain] = time.monotonic()
+        return self._client.head(url, **kwargs)
 
     def fetch_page(self, url: str) -> tuple[str, str, int, bool]:
         """T-40: GET url, falling back to Playwright for JS-heavy pages.

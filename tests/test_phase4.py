@@ -257,6 +257,13 @@ class TestPortalDetectorPassive:
         platform, method = det.detect("", {}, "https://example.gov")
         assert platform is None
 
+    def test_ckan_dataset_link_alone_not_sufficient(self):
+        # /dataset links are too generic; a structural CKAN signal is required
+        html = '<html><body><a href="/dataset/something">Data</a></body></html>'
+        det = self._detector()
+        platform, _ = det.detect(html, {}, "https://example.gov")
+        assert platform is None
+
 
 # ---------------------------------------------------------------------------
 # PortalDetector active probe

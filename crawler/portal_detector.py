@@ -25,7 +25,6 @@ CKAN_META_GENERATOR_REV_RE = re.compile(
 CKAN_BODY_CLASS_RE = re.compile(r'<body[^>]+class=["\'][^"\']*ckan-', re.IGNORECASE)
 CKAN_HTML_ID_RE = re.compile(r'<html[^>]+id=["\'][^"\']*ckan-', re.IGNORECASE)
 CKAN_JS_SNIPPET = "ckan.module("
-CKAN_DATASET_LINK_RE = re.compile(r'href=["\'](?:https?://[^"\']*)?/dataset[/"\'?#]', re.IGNORECASE)
 
 ARCGIS_DOMAINS = (".hub.arcgis.com", ".opendata.arcgis.com")
 ARCGIS_COMPONENT_TAGS = ("hub-hero", "hub-gallery")
@@ -43,7 +42,7 @@ ARCGIS_OG_SITE_NAME_REV_RE = re.compile(
 # Active probe endpoints (appended to base_url)
 _PROBE_PATHS = {
     "Socrata": "/api/catalog/v1?limit=1",
-    "CKAN": "/api/3/action/site_read",
+    "CKAN": "/api/3/action/status_show",
     "ArcGIS Hub": "/api/v3/datasets?page[size]=1",
 }
 
@@ -134,19 +133,15 @@ class PortalDetector:
         return False
 
     def _check_ckan(self, html: str) -> bool:
-        if CKAN_META_GENERATOR_RE.search(html):
-            return True
-        if CKAN_META_GENERATOR_REV_RE.search(html):
-            return True
-        if CKAN_BODY_CLASS_RE.search(html):
-            return True
-        if CKAN_HTML_ID_RE.search(html):
-            return True
-        if CKAN_JS_SNIPPET in html:
-            return True
-        if CKAN_DATASET_LINK_RE.search(html):
-            return True
-        return False
+        # /dataset links alone are too generic (non-CKAN sites use the same path).
+        # Require at least one CKAN-specific structural signal.
+        return bool(
+            CKAN_META_GENERATOR_RE.search(html)
+            or CKAN_META_GENERATOR_REV_RE.search(html)
+            or CKAN_BODY_CLASS_RE.search(html)
+            or CKAN_HTML_ID_RE.search(html)
+            or CKAN_JS_SNIPPET in html
+        )
 
     def _check_arcgis(self, html: str, base_url: str) -> bool:
         for domain in ARCGIS_DOMAINS:

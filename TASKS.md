@@ -6,10 +6,10 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 ## Phase 0 — Project Scaffolding
 
-- [ ] **T-00** Create `requirements.txt` with pinned dependencies: `httpx`, `playwright`, `beautifulsoup4`, `lxml`, `tldextract`, `urllib3`, `unicodedata2`
-- [ ] **T-01** Add `output/` to `.gitignore` (prevent run artifacts from being committed)
-- [ ] **T-02** Create empty `__init__.py` files in `crawler/`, `scorer/`, `reporter/`, and `setup/` to make them importable packages
-- [ ] **T-03** Add `playwright install chromium` step to project setup documentation (Playwright requires a browser binary download)
+- [x] **T-00** Create `requirements.txt` with pinned dependencies: `httpx`, `playwright`, `beautifulsoup4`, `lxml`, `tldextract`, `urllib3`, `unicodedata2`
+- [x] **T-01** Add `output/` to `.gitignore` (prevent run artifacts from being committed)
+- [x] **T-02** Create empty `__init__.py` files in `crawler/`, `scorer/`, `reporter/`, and `setup/` to make them importable packages
+- [x] **T-03** Add `playwright install chromium` step to project setup documentation (Playwright requires a browser binary download)
 
 ---
 
@@ -17,12 +17,12 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Produces `config/state_definitions.json`, which must exist before the scorer can run.
 
-- [ ] **T-10** `setup/generate_state_definitions.py` — CLI entrypoint accepting `--llm gemini|ollama` and `--pdf config/2022ISD.pdf`
-- [ ] **T-11** PDF text extraction: use `pdfplumber` or `pypdf` to extract text page-by-page from `config/2022ISD.pdf`; split into per-state sections by detecting state header patterns
-- [ ] **T-12** Gemini backend: prompt Gemini 2.5 Flash (free tier) with each state section; parse response to extract `census_terms` list and `notes` string
-- [ ] **T-13** Ollama backend: same prompt structure as T-12, directed at local Ollama REST API (`http://localhost:11434`)
-- [ ] **T-14** Output writer: merge per-state results into `{ "XX": { "census_terms": [...], "notes": "..." } }` schema and write to `config/state_definitions.json`
-- [ ] **T-15** Guard: if `config/state_definitions.json` already exists, prompt user before overwriting (or require `--force`)
+- [x] **T-10** `setup/generate_state_definitions.py` — CLI entrypoint accepting `--llm gemini|ollama` and `--pdf config/2022ISD.pdf`
+- [x] **T-11** PDF text extraction: use `pdfplumber` or `pypdf` to extract text page-by-page from `config/2022ISD.pdf`; split into per-state sections by detecting state header patterns
+- [x] **T-12** Gemini backend: prompt Gemini 2.5 Flash (free tier) with each state section; parse response to extract `census_terms` list and `notes` string
+- [x] **T-13** Ollama backend: same prompt structure as T-12, directed at local Ollama REST API (`http://localhost:11434`)
+- [x] **T-14** Output writer: merge per-state results into `{ "XX": { "census_terms": [...], "notes": "..." } }` schema and write to `config/state_definitions.json`
+- [x] **T-15** Guard: if `config/state_definitions.json` already exists, prompt user before overwriting (or require `--force`)
 
 ---
 
@@ -51,15 +51,15 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Tags each URL with a two-letter state code, `FEDERAL`, or `NATIONAL` before scoring.
 
-- [ ] **T-30** `crawler/state_tagger.py` — `StateTagger` class implementing the six-priority resolution chain (PRD §8):
+- [x] **T-30** `crawler/state_tagger.py` — `StateTagger` class implementing the six-priority resolution chain (PRD §8):
   1. `*.state.XX.us` TLD pattern → extract `XX`
   2. Two-letter subdomain before `.gov` (e.g., `sco.ca.gov` → `CA`, `auditor.mo.gov` → `MO`)
   3. Full state name in registered domain (e.g., `michigan.gov` → `MI`)
   4. Page content fallback: scan `<title>` and first `<h1>` for state name or abbreviation
   5. Domain in hardcoded federal list → `FEDERAL`
   6. Unresolved → `NATIONAL`
-- [ ] **T-31** Build the canonical state name↔abbreviation lookup (all 50 states + DC)
-- [ ] **T-32** Build the known federal domain list: `hud.gov`, `epa.gov`, `census.gov`, `usda.gov`, `faa.gov`, `usa.gov`, `data.gov` (extensible list)
+- [x] **T-31** Build the canonical state name↔abbreviation lookup (all 50 states + DC)
+- [x] **T-32** Build the known federal domain list: `hud.gov`, `epa.gov`, `census.gov`, `usda.gov`, `faa.gov`, `usa.gov`, `data.gov` (extensible list)
 
 ---
 
@@ -119,14 +119,14 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Follows internal links up to `--depth` hops to discover more pages and dataset links.
 
-- [ ] **T-50** `crawler/orchestrator.py` — `crawl_url(seed_url, depth)` function:
+- [x] **T-50** `crawler/orchestrator.py` — `crawl_url(seed_url, depth)` function:
   - Fetch seed URL via T-40/T-42
   - Parse all `<a href>` links; filter to same registered domain only (use `tldextract`)
   - BFS up to `depth` hops; do not revisit already-seen URLs within the same seed's crawl
   - Apply per-domain rate limiting (T-20) between each hop
   - Return list of `(url, html, http_status, js_rendered)` tuples for all pages visited
-- [ ] **T-51** Skip external links during BFS (different registered domain = external)
-- [ ] **T-52** Track `crawl_depth_reached`: the deepest hop level successfully fetched (0 if seed itself failed)
+- [x] **T-51** Skip external links during BFS (different registered domain = external)
+- [x] **T-52** Track `crawl_depth_reached`: the deepest hop level successfully fetched (0 if seed itself failed)
 
 ---
 
@@ -134,11 +134,11 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Scans collected page HTML for downloadable file links.
 
-- [ ] **T-60** `crawler/dataset_detector.py` — `detect_datasets(pages: list[html])` function:
+- [x] **T-60** `crawler/dataset_detector.py` — `detect_datasets(pages: list[html])` function:
   - Scan all `<a href>` values across all crawled pages
   - Detect by: href ends with `.csv`, `.xlsx`, `.xls`, `.json`, `.xml`, `.pdf`; or extension appears before a `?` query string; or `Content-Disposition: attachment` header (requires HEAD request on ambiguous URLs)
   - Return `(found: bool, urls: list[str], formats: list[str])` — formats deduplicated, PDFs tracked separately but included in `dataset_urls`
-- [ ] **T-61** HEAD request helper for `Content-Disposition` check — reuse the rate-limited client from T-20; do not download response body
+- [x] **T-61** HEAD request helper for `Content-Disposition` check — reuse the rate-limited client from T-20; do not download response body
 
 ---
 
