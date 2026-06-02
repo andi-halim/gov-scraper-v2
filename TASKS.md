@@ -146,11 +146,11 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Produces 0–100 Census relevance score using weighted keyword matching.
 
-- [ ] **T-70** `scorer/keyword_loader.py`:
+- [x] **T-70** `scorer/keyword_loader.py`:
   - Load `config/keywords.csv` (single `Keywords` column) into a set
   - Load `config/state_definitions.json` and extract `census_terms` for a given state
   - `get_effective_keywords(state: str) -> frozenset[str]`: returns union of base keywords + state terms; for `FEDERAL`/`NATIONAL`, returns base keywords only
-- [ ] **T-71** `scorer/scorer.py` — `score_page(pages: list[html], effective_keywords: frozenset, state: str) -> dict`:
+- [x] **T-71** `scorer/scorer.py` — `score_page(pages: list[PageResult], effective_keywords: frozenset) -> dict`:
   - For each page, parse with BeautifulSoup; extract title/H1–H3 text, body text, and anchor text as separate text pools
   - Apply Unicode NFC normalization and diacritic stripping before matching
   - Whole-word boundary match (`\b`) case-insensitively
@@ -158,7 +158,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   - `normalization_factor = len(effective_keywords)`
   - `relevance_score = min(100, round(weighted_hits / normalization_factor * 100))`
   - Return `{ "relevance_score": int, "matched_keywords": list[str] }`
-- [ ] **T-72** URL and domain text must be explicitly excluded from all three scoring text pools
+- [x] **T-72** URL and domain text must be explicitly excluded from all three scoring text pools
 
 ---
 

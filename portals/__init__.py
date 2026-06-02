@@ -1,13 +1,7 @@
 """T-45: Portal adapter package. Shared metadata scoring utility."""
 import re
-import unicodedata
 
-
-def _normalize_text(text: str) -> str:
-    nfc = unicodedata.normalize("NFC", text)
-    nfd = unicodedata.normalize("NFD", nfc)
-    stripped = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
-    return stripped.lower()
+from utils import normalize_text as _normalize_text
 
 
 def score_metadata(text: str, keywords: frozenset) -> tuple[int, list[str]]:

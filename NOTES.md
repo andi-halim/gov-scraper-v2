@@ -10,12 +10,12 @@
 | 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Done |
 | 5 | Depth crawler (`crawler/orchestrator.py`) | Done |
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
-| 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Not started |
+| 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
 | 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Not started |
 | 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
 | 10 | `run.py` entrypoint | Not started |
 
-**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, and dataset detector exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
+**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, dataset detector, and relevance scorer exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
 
 ### Phase 2 implementation notes
 
@@ -94,3 +94,29 @@
 - **Priority 5** (federal domain list): checks registered domain against `FEDERAL_DOMAINS` — `hud.gov`, `epa.gov`, `census.gov`, `usda.gov`, `faa.gov`, `usa.gov`, `data.gov`, `va.gov`.
 - **Priority 6**: returns `"NATIONAL"`.
 - `STATE_NAME_TO_ABBREV`, `ABBREV_TO_STATE_NAME`, `STATE_ABBREVS`, and `FEDERAL_DOMAINS` are module-level constants available for import by other components.
+
+---
+
+### Phase 7 implementation notes
+
+**`scorer/keyword_loader.py`**
+- File-reading logic is split into `_load_keywords(path)` and `_load_state_defs(path)` — pure functions that accept a `Path` and are directly testable with `tmp_path` fixtures. The `lru_cache`'d wrappers `_base_keywords()` and `_state_defs()` are one-liners that call them with the real config paths; they are not tested directly.
+- `config/keywords.csv` is a headerless single-column file — the loader uses `csv.reader` and reads `row[0]`, not `csv.DictReader`. Do not add a header row to the CSV.
+- `get_effective_keywords(state)` returns a `frozenset` (hashable) so it can be used directly as a cache key downstream. `FEDERAL` and `NATIONAL` states receive base keywords only.
+
+**`scorer/scorer.py` — `score_page(pages, effective_keywords)`**
+- Text pools are **independent**: `<h1>`–`<h3>` tags are extracted into the heading pool and then `decompose()`'d from the tree before `body.get_text()` runs, so heading text does not also score in the body pool. `<title>` is in `<head>` and is naturally excluded from body. Anchor text remains part of the body pool (it is visible body text) and also scores independently in the anchor pool.
+- Effective tier weights per keyword: heading-only = 0.50, body-only = 0.35, anchor-only = 0.15, heading+body = 0.85, all three = 1.00.
+- Regex patterns are precompiled once per unique `effective_keywords` frozenset via `@lru_cache` on `_compile_patterns(keywords)`. Since `get_effective_keywords` is also cached, patterns are compiled at most once per state per process lifetime.
+- URL strings (`https?://...`, `www....`) are stripped from all three pools before scoring (T-72). `href` attribute values are excluded naturally by BeautifulSoup's `get_text()`.
+- Text normalization (NFC + diacritic strip + lowercase) is imported from `utils.normalize_text` — shared with `portals/__init__.py`.
+
+**`utils.py`**
+- Added at the project root to hold `normalize_text(text) -> str`, shared between `scorer/scorer.py` and `portals/__init__.py`. Both previously had identical inline implementations.
+
+---
+
+### Phase 10 implementation notes
+
+**`PageResult` NamedTuple upgrade**
+`PageResult` is currently a bare tuple alias defined in `crawler/orchestrator.py` and imported by `scorer/scorer.py`. Upgrade it to a `NamedTuple` in a new `types.py` at the project root so fields are accessible by name (`page.url`, `page.html`, etc.) rather than by index. Both `crawler/orchestrator.py` and `scorer/scorer.py` should import from `types.py`. Update all construction sites: `orchestrator.py`, `dataset_detector.py`, and any test files that build `PageResult` tuples inline.
