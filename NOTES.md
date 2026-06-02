@@ -11,7 +11,7 @@
 | 5 | Depth crawler (`crawler/orchestrator.py`) | Done |
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
-| 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Not started |
+| 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Done |
 | 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
 | 10 | `run.py` entrypoint | Not started |
 
@@ -113,6 +113,17 @@
 
 **`utils.py`**
 - Added at the project root to hold `normalize_text(text) -> str`, shared between `scorer/scorer.py` and `portals/__init__.py`. Both previously had identical inline implementations.
+
+---
+
+### Phase 8 implementation notes
+
+**`crawler/orchestrator.py` — `load_urls(csv_path)`**
+- Uses `csv.DictReader`; reads only `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns. All other columns (including `RESOURCE_NAME`) are ignored entirely.
+- Blank/whitespace-only `WEB_ADDRESS` values are skipped with a `WARNING` log. Malformed entries (missing scheme or netloc per `urlparse`) are also skipped with a `WARNING` log.
+- Deduplication key is `scheme.lower() + netloc.lower() + path.lower()` — query strings and fragments are excluded so `example.gov/page?v=1` and `example.gov/page?v=2` are treated as the same URL. First occurrence is kept; subsequent duplicates are logged as `WARNING`.
+- Priority sort uses Python's stable `list.sort(key=...)` so relative CSV order is preserved within each group (`priority=True` first, `priority=False` second).
+- `_normalize_url_for_dedup()` is a module-level helper (not exported) that encapsulates the normalization logic.
 
 ---
 

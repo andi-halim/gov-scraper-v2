@@ -166,12 +166,12 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Reads `config/urls.csv` and prepares the ordered processing queue.
 
-- [ ] **T-80** `crawler/orchestrator.py` — `load_urls(csv_path: str) -> list[dict]`:
+- [x] **T-80** `crawler/orchestrator.py` — `load_urls(csv_path: str) -> list[dict]`:
   - Read `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns only; ignore all others including `RESOURCE_NAME`
   - Skip rows where `WEB_ADDRESS` is empty/blank; log each skip
   - Validate each URL is parseable (use `urllib.parse.urlparse`); log and skip malformed entries
   - Deduplicate by normalized URL (lowercase scheme+host+path); log duplicates
-- [ ] **T-81** Sort queue: `PRIORITY_RESOURCE == "YES"` (case-insensitive) rows first, preserving relative order within each group; set `priority: true/false` on each row
+- [x] **T-81** Sort queue: `PRIORITY_RESOURCE == "YES"` (case-insensitive) rows first, preserving relative order within each group; set `priority: true/false` on each row
 
 ---
 

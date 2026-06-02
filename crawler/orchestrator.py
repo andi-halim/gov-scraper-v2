@@ -1,6 +1,8 @@
-"""Phase 5 depth crawler (T-50–T-52)."""
+"""Depth crawler (T-50–T-52) and input ingestion (T-80–T-81)."""
+import csv
 import logging
 from collections import deque
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import tldextract
@@ -13,6 +15,55 @@ logger = logging.getLogger(__name__)
 # Namedtuple-style alias for the per-page result
 # (url, html, http_status, js_rendered)
 PageResult = tuple[str, str, int, bool]
+
+
+def _normalize_url_for_dedup(url: str) -> str:
+    """Return lowercase scheme+netloc+path for deduplication."""
+    p = urlparse(url)
+    return f"{p.scheme.lower()}://{p.netloc.lower()}{p.path.lower()}"
+
+
+def load_urls(csv_path: str) -> list[dict]:
+    """T-80/T-81: Read a urls.csv and return a priority-sorted list of URL dicts.
+
+    Each dict has keys: 'url' (str), 'priority' (bool).
+    Reads only WEB_ADDRESS and PRIORITY_RESOURCE columns; all others are ignored.
+    Skips blank and malformed entries. Deduplicates by normalized URL.
+    Priority URLs (PRIORITY_RESOURCE == 'YES', case-insensitive) sort first;
+    relative order within each group is preserved.
+    """
+    rows: list[dict] = []
+    seen: set[str] = set()
+
+    with Path(csv_path).open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for lineno, row in enumerate(reader, start=2):
+            raw_url = (row.get("WEB_ADDRESS") or "").strip()
+            priority_raw = (row.get("PRIORITY_RESOURCE") or "").strip()
+
+            if not raw_url:
+                logger.warning("Row %d: skipping blank WEB_ADDRESS", lineno)
+                continue
+
+            try:
+                parsed = urlparse(raw_url)
+                if not parsed.scheme or not parsed.netloc:
+                    raise ValueError("missing scheme or netloc")
+            except Exception:
+                logger.warning("Row %d: skipping malformed URL %r", lineno, raw_url)
+                continue
+
+            normalized = _normalize_url_for_dedup(raw_url)
+            if normalized in seen:
+                logger.warning("Row %d: duplicate URL %r — skipping", lineno, raw_url)
+                continue
+            seen.add(normalized)
+
+            rows.append({"url": raw_url, "priority": priority_raw.upper() == "YES"})
+
+    rows.sort(key=lambda r: 0 if r["priority"] else 1)
+    return rows
+
 
 # Convert below function into a util at Phase 10
 def _registered_domain(url: str) -> str:
@@ -31,7 +82,7 @@ def _extract_links(html: str, base_url: str) -> list[str]:
         return []
     links: list[str] = []
     for tag in soup.find_all("a", href=True):
-        href = tag["href"].strip()
+        href = tag["href"].strip() if tag["href"] else ""
         if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
             continue
         try:
