@@ -12,10 +12,10 @@
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
 | 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Done |
-| 9 | Output writer + run modes (`reporter/writer.py`) | Not started |
+| 9 | Output writer + run modes (`reporter/writer.py`) | Done |
 | 10 | `run.py` entrypoint | Not started |
 
-**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, dataset detector, and relevance scorer exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
+**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, dataset detector, relevance scorer, input ingestion, and incremental output writer exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
 
 ### Phase 2 implementation notes
 
@@ -120,10 +120,23 @@
 
 **`crawler/orchestrator.py` — `load_urls(csv_path)`**
 - Uses `csv.DictReader`; reads only `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns. All other columns (including `RESOURCE_NAME`) are ignored entirely.
-- Blank/whitespace-only `WEB_ADDRESS` values are skipped with a `WARNING` log. Malformed entries (missing scheme or netloc per `urlparse`) are also skipped with a `WARNING` log.
-- Deduplication key is `scheme.lower() + netloc.lower() + path.lower()` — query strings and fragments are excluded so `example.gov/page?v=1` and `example.gov/page?v=2` are treated as the same URL. First occurrence is kept; subsequent duplicates are logged as `WARNING`.
+- Blank/whitespace-only `WEB_ADDRESS` values are skipped with a `WARNING` log. Malformed entries (missing scheme or netloc per `urlparse`) are also skipped with a `WARNING` log. Validation is a direct `if not parsed.scheme or not parsed.netloc` guard — `urlparse` never raises, so no try/except is needed.
+- Deduplication key is `scheme.lower() + netloc.lower() + path.lower()` — query strings and fragments are excluded so `example.gov/page?v=1` and `example.gov/page?v=2` are treated as the same URL. An empty path (root URL with no trailing slash) is normalized to `"/"` so `https://example.gov` and `https://example.gov/` are treated as duplicates. First occurrence is kept; subsequent duplicates are logged as `WARNING`.
 - Priority sort uses Python's stable `list.sort(key=...)` so relative CSV order is preserved within each group (`priority=True` first, `priority=False` second).
 - `_normalize_url_for_dedup()` is a module-level helper (not exported) that encapsulates the normalization logic.
+
+---
+
+### Phase 9 implementation notes
+
+**`reporter/writer.py` — `ReportWriter`**
+- `open(resume=False)` handles both fresh and resume modes. Fresh run: creates the directory, writes the CSV header, returns `set()`. Resume: reads the existing `results.csv` to collect seen URLs (keyed on the `url` column), then opens in append mode — no header written. If `resume=True` but no CSV exists yet, falls back to fresh run behaviour silently.
+- `append_row(result)` calls a module-level `_serialize(result)` helper before handing off to `csv.DictWriter`. `extrasaction="ignore"` means extra keys in the result dict are harmlessly dropped.
+- `_serialize` rules: `None` → `""` (handles nullable `robots_allowed`); `bool` → `"true"` / `"false"` (lowercase, not Python's `True`/`False`); `list` → pipe-joined string; all other types passed through unchanged.
+- `collect_seen_urls(output_root, exclude_dir)` is a `@staticmethod` for `--new-only` mode. It scans all immediate subdirectories of `output_root`, skipping `exclude_dir` (the current run's dated directory), and unions all `url` values from any `results.csv` found. Returns `set()` if `output_root` does not exist.
+- `make_error_row(url, priority, error)` is a `@staticmethod` that returns a fully-populated result dict with `active=False`, `http_status=0`, `relevance_score=0`, `robots_allowed=None`, empty lists for all list fields, and the exception message in `error_notes`. The caller passes this dict directly to `append_row()`.
+- Missing boolean columns in a result dict passed to `_serialize` default to `"false"` (not `""`) via `_BOOL_COLUMNS`, ensuring the CSV is never silently missing a boolean value.
+- T-93 (mutual exclusivity of `--resume` / `--new-only`) and T-94 (per-URL try/except wrapping) are both enforced in `run.py` — `ReportWriter` provides the tools (`make_error_row`, `open(resume=True)`, `collect_seen_urls`) but does not orchestrate them.
 
 ---
 

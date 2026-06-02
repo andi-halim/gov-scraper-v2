@@ -204,6 +204,25 @@ class TestLoadUrlsDeduplication:
         result = load_urls(str(f))
         assert len(result) == 1
 
+    def test_trailing_slash_root_urls_are_duplicates(self, tmp_path):
+        # https://example.gov and https://example.gov/ are the same site
+        f = tmp_path / "urls.csv"
+        _write_csv(f, [
+            {"RESOURCE_NAME": "", "WEB_ADDRESS": "https://example.gov", "PRIORITY_RESOURCE": ""},
+            {"RESOURCE_NAME": "", "WEB_ADDRESS": "https://example.gov/", "PRIORITY_RESOURCE": ""},
+        ])
+        result = load_urls(str(f))
+        assert len(result) == 1
+
+    def test_trailing_slash_first_occurrence_kept(self, tmp_path):
+        f = tmp_path / "urls.csv"
+        _write_csv(f, [
+            {"RESOURCE_NAME": "", "WEB_ADDRESS": "https://example.gov", "PRIORITY_RESOURCE": ""},
+            {"RESOURCE_NAME": "", "WEB_ADDRESS": "https://example.gov/", "PRIORITY_RESOURCE": ""},
+        ])
+        result = load_urls(str(f))
+        assert result[0]["url"] == "https://example.gov"  # first occurrence preserved verbatim
+
 
 # ---------------------------------------------------------------------------
 # T-81: priority sorting

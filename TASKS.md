@@ -179,12 +179,12 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Incremental CSV output + crash recovery and delta run support.
 
-- [ ] **T-90** `reporter/writer.py` — `ReportWriter` class:
+- [x] **T-90** `reporter/writer.py` — `ReportWriter` class:
   - Create `output/<YYYY-MM-DD>/` directory at run start
   - Write CSV header once (see PRD §12 column list) on fresh run; never re-write on resume
   - `append_row(result: dict)`: serialize one result dict to CSV and flush immediately after each URL
-- [ ] **T-91** `--resume` mode: at startup, read the current run's output CSV (same date directory); collect all `url` values already present; skip those in the queue
-- [ ] **T-92** `--new-only` mode: at startup, scan all subdirectories under `output/` (excluding the current run's); collect all `url` values ever seen; skip those in the queue
+- [x] **T-91** `--resume` mode: at startup, read the current run's output CSV (same date directory); collect all `url` values already present; skip those in the queue
+- [x] **T-92** `--new-only` mode: at startup, scan all subdirectories under `output/` (excluding the current run's); collect all `url` values ever seen; skip those in the queue
 - [ ] **T-93** Enforce mutual exclusivity of `--resume` and `--new-only` at CLI parse time (exit with error if both are passed)
 - [ ] **T-94** Error handling: wrap each URL's full pipeline execution in a try/except; on any uncaught exception, write a result row with `active: false`, `relevance_score: 0`, and the exception message in `error_notes`; continue to the next URL
 

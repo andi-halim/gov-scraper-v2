@@ -18,9 +18,15 @@ PageResult = tuple[str, str, int, bool]
 
 
 def _normalize_url_for_dedup(url: str) -> str:
-    """Return lowercase scheme+netloc+path for deduplication."""
+    """Return lowercase scheme+netloc+path for deduplication.
+
+    An empty path (root URL without trailing slash) is normalized to "/" so
+    that https://example.gov and https://example.gov/ are treated as the same
+    URL. Query strings and fragments are excluded.
+    """
     p = urlparse(url)
-    return f"{p.scheme.lower()}://{p.netloc.lower()}{p.path.lower()}"
+    path = p.path.lower() or "/"
+    return f"{p.scheme.lower()}://{p.netloc.lower()}{path}"
 
 
 def load_urls(csv_path: str) -> list[dict]:
@@ -45,11 +51,8 @@ def load_urls(csv_path: str) -> list[dict]:
                 logger.warning("Row %d: skipping blank WEB_ADDRESS", lineno)
                 continue
 
-            try:
-                parsed = urlparse(raw_url)
-                if not parsed.scheme or not parsed.netloc:
-                    raise ValueError("missing scheme or netloc")
-            except Exception:
+            parsed = urlparse(raw_url)
+            if not parsed.scheme or not parsed.netloc:
                 logger.warning("Row %d: skipping malformed URL %r", lineno, raw_url)
                 continue
 
