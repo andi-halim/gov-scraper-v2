@@ -62,17 +62,19 @@ Return ONLY valid JSON with no markdown fences:
 
 Rules for census_terms:
 - Lowercase strings only
+- Singular form only — use "parish" not "parishes", "borough" not "boroughs", "district" not "districts"
 - Include local equivalents (e.g. "parish" for Louisiana county-equivalents, "borough" for Alaska)
 - Include all unit type names that differ from or extend Census standard terminology
-- Include locally used plural forms when they appear (e.g. "parishes", "boroughs")
 - Exclude generic English words ("the", "and", "government", "local", "state")
 - Exclude US state names and abbreviations
 
 State section text:
 {section_text}"""
 
-# Max section text length sent to LLM (avoid token overflow on large state sections)
-MAX_SECTION_CHARS = 4000
+# Max section text length sent to LLM.
+# Gemini 2.5 Flash context window is 1M tokens; 12000 chars (~3000 tokens) is safe
+# and avoids truncating relevant state-specific vocabulary from longer sections.
+MAX_SECTION_CHARS = 12000
 
 
 def extract_state_sections(pdf_path: str) -> dict[str, str]:
@@ -196,28 +198,42 @@ def _load_remaining_states(output_path: Path, abbrev_path: Path) -> list[str]:
 
 _GEMINI_MAX_RETRIES = 3
 
+# Reusable Gemini client — created once when first needed so we don't pay
+# connection overhead on every state call.
+_gemini_client = None
+
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        try:
+            from google import genai
+        except ImportError:
+            log.error("google-genai not installed. Run: pip install google-genai")
+            sys.exit(1)
+        load_dotenv()
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            log.error("GEMINI_API_KEY environment variable is not set.")
+            sys.exit(1)
+        _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
+
 
 def call_gemini(
     state_name: str,
     section_text: str,
     model: str = "gemini-2.5-flash",
     request_counter: Optional[list[int]] = None,
-) -> dict:
-    """Call Gemini API and return {"census_terms": [...], "notes": "..."}."""
+) -> tuple[dict, int]:
+    """Call Gemini API and return ({"census_terms": [...], "notes": "..."}, attempts_used)."""
     try:
-        from google import genai
         from google.genai import errors as genai_errors, types as genai_types
     except ImportError:
         log.error("google-genai not installed. Run: pip install google-genai")
         sys.exit(1)
 
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        log.error("GEMINI_API_KEY environment variable is not set.")
-        sys.exit(1)
-
-    client = genai.Client(api_key=api_key)
+    client = _get_gemini_client()
     prompt = PROMPT_TEMPLATE.format(state_name=state_name, section_text=section_text)
 
     for attempt in range(1, _GEMINI_MAX_RETRIES + 1):
@@ -225,15 +241,20 @@ def call_gemini(
             request_counter[0] += 1
         try:
             response = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(
-                            disable=True
-                        ),
+                model=model,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(
+                        disable=True
                     ),
-                )
-            return _parse_llm_response((response.text or "").strip(), state_name)
+                    # Disable thinking — this is a structured extraction task that
+                    # does not need chain-of-thought. Thinking is on by default for
+                    # gemini-2.5-flash and adds significant compute overhead, causing
+                    # 503 "high demand" errors on the free tier.
+                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+                ),
+            )
+            return _parse_llm_response((response.text or "").strip(), state_name), attempt
         except genai_errors.APIError as exc:
             retryable = exc.code in (429, 503)
             if not retryable or attempt == _GEMINI_MAX_RETRIES:
@@ -304,6 +325,18 @@ def _parse_llm_response(raw: str, state_name: str) -> dict:
 # Main processing loop
 # ---------------------------------------------------------------------------
 
+def _write_result_immediately(output_path: Path, abbrev: str, result: dict) -> None:
+    """Merge one state entry into output_path and flush to disk immediately."""
+    existing: dict = {}
+    if output_path.exists():
+        with open(output_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+    existing[abbrev] = result
+    with open(output_path, "w", encoding="utf-8") as fh:
+        json.dump(existing, fh, indent=2, ensure_ascii=False)
+    log.info("  Persisted %s immediately to %s", abbrev, output_path)
+
+
 def process_states(
     sections: dict[str, str],
     llm: str,
@@ -312,6 +345,7 @@ def process_states(
     gemini_model: str = "gemini-2.5-flash",
     max_requests: int = 0,
     request_counter: Optional[list[int]] = None,
+    output_path: Optional[Path] = None,
 ) -> dict:
     """Run each state section through the selected LLM backend."""
     results: dict = {}
@@ -331,20 +365,28 @@ def process_states(
 
         try:
             if llm == "gemini":
-                result = call_gemini(
+                result, attempts = call_gemini(
                     state_name, section_text,
                     model=gemini_model,
                     request_counter=request_counter,
                 )
+                results[abbrev] = result
+                log.info(f"  → {len(result['census_terms'])} terms")
+                if attempts == _GEMINI_MAX_RETRIES and output_path is not None:
+                    _write_result_immediately(output_path, abbrev, result)
             else:
                 result = call_ollama(state_name, section_text, base_url=ollama_url, model=ollama_model)
-
-            results[abbrev] = result
-            log.info(f"  → {len(result['census_terms'])} terms")
+                results[abbrev] = result
+                log.info(f"  → {len(result['census_terms'])} terms")
 
         except Exception as exc:
             log.error(f"  Error processing {state_name}: {exc}")
-            results[abbrev] = {"census_terms": [], "notes": f"error: {exc}"}
+            error_result = {"census_terms": [], "notes": f"error: {exc}"}
+            results[abbrev] = error_result
+            # All retries were consumed before raising — persist immediately so
+            # the error entry survives any subsequent crash or quota cutoff.
+            if llm == "gemini" and output_path is not None:
+                _write_result_immediately(output_path, abbrev, error_result)
 
         finally:
             if llm == "gemini":
@@ -484,14 +526,15 @@ def main() -> None:
         effective_max = args.max_requests
 
     # T-12 / T-13: process each section through the LLM
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     results = process_states(
         sections, args.llm, args.ollama_url, args.ollama_model, args.gemini_model,
         max_requests=effective_max,
         request_counter=request_counter,
+        output_path=output_path,
     )
 
     # T-14: always merge into existing output to preserve prior results
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
     if output_path.exists():
         with open(output_path, "r", encoding="utf-8") as fh:
