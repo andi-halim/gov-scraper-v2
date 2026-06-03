@@ -4,8 +4,8 @@ import re
 
 from bs4 import BeautifulSoup, Comment
 
-from crawler.orchestrator import PageResult
-from utils import normalize_text as _normalize
+from page_result import PageResult
+from utils import normalize_text as _normalize, plural_aware_pattern as _plural_pattern
 
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 
@@ -55,7 +55,7 @@ def _extract_pools(html: str) -> tuple[str, str, str]:
 def _compile_patterns(keywords: frozenset) -> list[tuple[str, re.Pattern]]:
     """Precompile regex patterns for a keyword set. Cached per unique frozenset."""
     return [
-        (kw, re.compile(r"\b" + re.escape(_normalize(kw)) + r"\b"))
+        (kw, re.compile(_plural_pattern(_normalize(kw))))
         for kw in keywords
     ]
 

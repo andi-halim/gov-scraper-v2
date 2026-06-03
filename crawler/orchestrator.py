@@ -9,12 +9,9 @@ import tldextract
 from bs4 import BeautifulSoup
 
 from crawler.http_client import HttpClient
+from page_result import PageResult
 
 logger = logging.getLogger(__name__)
-
-# Namedtuple-style alias for the per-page result
-# (url, html, http_status, js_rendered)
-PageResult = tuple[str, str, int, bool]
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -130,10 +127,10 @@ def crawl_url(
             html, final_url, http_status, js_rendered = http_client.fetch_page(url)
         except Exception as exc:
             logger.warning("Fetch error for %s: %s", url, exc)
-            pages.append((url, "", 0, False))
+            pages.append(PageResult(url, "", 0, False))
             continue
 
-        pages.append((url, html, http_status, js_rendered))
+        pages.append(PageResult(url, html, http_status, js_rendered))
 
         # Guard the resolved URL so a redirect target is never fetched twice
         if final_url != url:

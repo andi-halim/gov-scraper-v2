@@ -1,7 +1,7 @@
 """T-45: Portal adapter package. Shared metadata scoring utility."""
 import re
 
-from utils import normalize_text as _normalize_text
+from utils import normalize_text as _normalize_text, plural_aware_pattern as _plural_pattern
 
 
 def score_metadata(text: str, keywords: frozenset) -> tuple[int, list[str]]:
@@ -17,7 +17,7 @@ def score_metadata(text: str, keywords: frozenset) -> tuple[int, list[str]]:
     text_norm = _normalize_text(text)
     matched = [
         kw for kw in keywords
-        if re.search(r"\b" + re.escape(_normalize_text(kw)) + r"\b", text_norm)
+        if re.search(_plural_pattern(_normalize_text(kw)), text_norm)
     ]
 
     score = min(100, round(len(matched) / len(keywords) * 100))

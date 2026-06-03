@@ -18,8 +18,7 @@ _DOWNLOAD_PATH_RE = re.compile(
     re.IGNORECASE,
 )
 
-# (url, html, http_status, js_rendered)
-PageResult = tuple[str, str, int, bool]
+from page_result import PageResult
 
 
 def _extract_format_from_url(url: str) -> str | None:

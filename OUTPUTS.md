@@ -80,3 +80,38 @@ python -m pytest tests/ --ignore=tests/test_integration_urls.py
 ```
 
 **Result:** 120 passed in 0.88s
+
+---
+
+## 2026-06-02
+
+### Phase 10 — run.py entrypoint + T-49/T-93/T-94 + PageResult NamedTuple upgrade
+
+#### Files created / changed
+- `page_result.py` — `PageResult` NamedTuple (renamed from `types.py` to avoid stdlib shadow)
+- `run.py` — full CLI entrypoint
+- `tests/test_phase10.py` — 60 new unit tests
+- `crawler/http_client.py` — added `last_response_headers` side-channel
+- `crawler/orchestrator.py`, `scorer/scorer.py`, `crawler/dataset_detector.py` — import `PageResult` from `page_result`
+
+#### Full test suite
+```bash
+python -m pytest tests/ -q --tb=short
+```
+**Result:** 369 passed, 18 skipped in 1.18s
+
+#### Smoke run (5 URLs, depth=1, delay=1s)
+```bash
+python run.py --input /tmp/test_urls.csv --depth 1 --delay 1.0 --output /tmp/gov-scraper-test-run
+```
+
+**Results:**
+| URL | active | state | score | datasets | error |
+|---|---|---|---|---|---|
+| https://sos.alabama.gov/ | false | — | 0 | — | SSL cert error |
+| http://www.alsde.edu/ | false | — | 0 | — | SSL hostname mismatch |
+| http://www.outdooralabama.com/ | **true** | AL | 22 | pdf | — |
+| http://www.psc.state.al.us/ | **true** | AL | 10 | pdf | — |
+| https://examiners.alabama.gov/audit_reports.aspx | **true** | AL | 3 | — | — |
+
+Output CSV: `/tmp/gov-scraper-test-run/results.csv` (5 rows, all 20 columns present)

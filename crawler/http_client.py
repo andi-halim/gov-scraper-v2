@@ -48,6 +48,8 @@ class HttpClient:
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
         self._delay = delay
         self._last_request: dict[str, float] = {}
+        # Headers from the most recent fetch_page() call; read by run.py for portal detection.
+        self.last_response_headers: dict = {}
         self._client = httpx.Client(
             headers={"User-Agent": USER_AGENT},
             follow_redirects=True,
@@ -107,6 +109,7 @@ class HttpClient:
         Network errors propagate to the caller.
         """
         response = self.get(url)
+        self.last_response_headers = dict(response.headers)
         html = response.text
         final_url = str(response.url)
         http_status = response.status_code
