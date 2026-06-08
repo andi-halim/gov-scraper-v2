@@ -13,9 +13,9 @@
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
 | 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Done |
 | 9 | Output writer + run modes (`reporter/writer.py`) | Done |
-| 10 | `run.py` entrypoint | Not started |
+| 10 | `run.py` entrypoint | Done |
 
-**Current state:** the one-time PDF setup script, HTTP/robots layer, state tagger, page fetcher, portal detection, depth crawler, dataset detector, relevance scorer, input ingestion, and incremental output writer exist. `run.py` does not exist yet — the "Running the crawler" commands above will fail until Phase 10 is complete.
+**Current state:** all phases complete. The full pipeline is wired in `run.py` and the test suite passes (433 unit tests, 18 integration tests skipped by default). Remaining open items are Phase 11 validation tasks T-110 and T-117 — T-110 requires completing the ISD setup script for all 51 states; T-117 requires a live integration run against known portal URLs.
 
 ### Phase 2 implementation notes
 
@@ -137,6 +137,42 @@
 - `make_error_row(url, priority, error)` is a `@staticmethod` that returns a fully-populated result dict with `active=False`, `http_status=0`, `relevance_score=0`, `robots_allowed=None`, empty lists for all list fields, and the exception message in `error_notes`. The caller passes this dict directly to `append_row()`.
 - Missing boolean columns in a result dict passed to `_serialize` default to `"false"` (not `""`) via `_BOOL_COLUMNS`, ensuring the CSV is never silently missing a boolean value.
 - T-93 (mutual exclusivity of `--resume` / `--new-only`) and T-94 (per-URL try/except wrapping) are both enforced in `run.py` — `ReportWriter` provides the tools (`make_error_row`, `open(resume=True)`, `collect_seen_urls`) but does not orchestrate them.
+
+---
+
+### Phase 3 unit tests (T-112)
+
+`tests/test_phase3.py` — 64 unit tests covering all six resolution priorities:
+
+| Class | What it covers |
+|---|---|
+| `TestConstants` | 51-entry `STATE_NAME_TO_ABBREV`, `FEDERAL_DOMAINS` membership |
+| `TestPriority1StateUs` | `*.state.XX.us` → state code; invalid codes fall through; beats P3 |
+| `TestPriority2TwoLetterGov` | `sco.ca.gov` → CA, `auditor.mo.gov` → MO; `va.gov` excluded as federal |
+| `TestPriority3StateName` | Full name in domain; multi-word compression; longest-first ordering |
+| `TestPriority4Content` | State name in `<title>`/`<h1>`; case-sensitivity for abbreviations; empty HTML skips P4 |
+| `TestPriority5Federal` | All 8 FEDERAL_DOMAINS; subdomain routing |
+| `TestPriority6National` | Unresolvable URLs → NATIONAL |
+| `TestPriorityOrdering` | Each priority explicitly beats the one below it |
+
+---
+
+### Phase 11 smoke run — 2026-06-03
+
+**Command:** `python run.py --input /tmp/urls_filtered.csv --depth 1 --delay 1.0`
+
+**Filter:** Only URLs whose URL-pattern state tag is one of the 26 states currently in `state_definitions.json` (AK, AL, AR, AZ, CA, CO, CT, DC, DE, FL, GA, HI, IA, ID, IL, IN, KS, KY, LA, MA, MD, ME, MI, MN, MO, MS), plus FEDERAL and NATIONAL.
+
+**Input:** 263 rows from `config/urls.csv` passed the filter; after deduplication and malformed-URL rejection, **248 unique URLs** were queued.
+
+**Malformed entries caught at startup (logged as WARNING, skipped):**
+- Missing scheme: `www.al1call.com/membership_list.doc`, `www.apers.org`, `www.insurance.arkansas.gov`, `www.klc.org`, `www.dlg.ky.gov`, `www.mmlonline.com`, `www.mocities.com`, `oa.mo.gov`, `www.ded.mo.gov`, `www.sdtownships.com`, `oversightboard.pr.gov`
+- Non-URL value in WEB_ADDRESS: `Arizona Fire Insurance Premium Tax Refund | Department of Forestry and Fire Management`, `rclark@mdcounties.org` (email address)
+- Duplicate: `http://portal.hud.gov/hudportal/HUD?...` (second occurrence), `http://www.mass.gov/?...` (duplicate query-string variant)
+
+**Output:** `output/2026-06-03/results.csv` — written incrementally, one row flushed per completed URL.
+
+**States excluded from this run** (not yet in `state_definitions.json`): MT, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY (69 URLs excluded).
 
 ---
 

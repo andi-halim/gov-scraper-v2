@@ -180,6 +180,9 @@ If passive signals point to multiple platforms (rare), the active API probe resu
 - Portal detected → skip depth crawler; call the appropriate adapter (see §12).
 - No portal detected → proceed with the standard depth crawler and scorer.
 
+**Known site-specific behaviour:**
+- `catalog.data.gov` — as of 2026, this site has migrated from CKAN to a custom Next.js SPA. All CKAN API endpoints (`/api/3/action/*`) return 404 and passive signals are absent. The portal detector correctly falls through; the site is processed as a plain page via the standard depth crawler.
+
 **Output:** record `portal_platform` (`Socrata`, `CKAN`, `ArcGIS Hub`, or empty string), `portal_dataset_count` (total datasets in catalog), `portal_relevant_count` (datasets with score > 0), and `top_dataset_urls` (pipe-separated, up to 10, sorted by relevance score descending).
 
 ---
@@ -298,9 +301,7 @@ Given the same input CSV and the same live state of each website, two runs must 
 ```
 config/urls.csv
        |
-  [Orchestrator]
-       |
-  [State Tagger]  <-- URL patterns + page content fallback
+  [Orchestrator / load_urls]
        |
   [Priority Queue]  <-- PRIORITY_RESOURCE=YES sorted first
        |
@@ -309,6 +310,10 @@ config/urls.csv
   | [RobotsChecker]                         |
   |      |                                  |
   | [ActivityChecker]  (HTTP GET + redirect)|
+  |      |                                  |
+  | [StateTagger]  <-- URL patterns first,  |
+  |   then page content fallback (P4)       |
+  |   → effective_keywords for scorer       |
   |      |                                  |
   | [PortalDetector]  (passive → API probe) |
   |      |                                  |
@@ -324,6 +329,8 @@ config/urls.csv
        |
   output/<run-date>/results.csv
 ```
+
+> Note: StateTagger runs per-URL inside the loop (after the page fetch) so that Priority 4 — page content fallback — has rendered HTML available. It cannot run as a batch pre-processing step because most URLs require a live page fetch to resolve state.
 
 ### One-time setup
 
@@ -365,7 +372,12 @@ gov-scraper-v2/
     writer.py
   setup/
     generate_state_definitions.py
+  tests/
+    test_phase2.py … test_phase10.py
+    test_integration_urls.py      # skipped by default; set RUN_INTEGRATION_TESTS=1
   output/                         # gitignored
+  page_result.py                  # PageResult NamedTuple shared across packages
+  utils.py                        # normalize_text() shared between scorer and portals
   run.py                          # entrypoint
 ```
 

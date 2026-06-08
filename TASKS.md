@@ -111,7 +111,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   - Per dataset: extract `attributes.name`, `attributes.description`, `attributes.tags`, `attributes.access.urls.download`
   - Score metadata; return adapter contract dict
 
-- [ ] **T-49** Portal routing in `crawler/orchestrator.py`: after initial page fetch, call `PortalDetector.detect()`; if platform is not `None`, call the matching adapter and skip the depth crawl; if `None`, proceed normally
+- [x] **T-49** Portal routing in `crawler/orchestrator.py`: after initial page fetch, call `PortalDetector.detect()`; if platform is not `None`, call the matching adapter and skip the depth crawl; if `None`, proceed normally
 
 ---
 
@@ -185,8 +185,8 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
   - `append_row(result: dict)`: serialize one result dict to CSV and flush immediately after each URL
 - [x] **T-91** `--resume` mode: at startup, read the current run's output CSV (same date directory); collect all `url` values already present; skip those in the queue
 - [x] **T-92** `--new-only` mode: at startup, scan all subdirectories under `output/` (excluding the current run's); collect all `url` values ever seen; skip those in the queue
-- [ ] **T-93** Enforce mutual exclusivity of `--resume` and `--new-only` at CLI parse time (exit with error if both are passed)
-- [ ] **T-94** Error handling: wrap each URL's full pipeline execution in a try/except; on any uncaught exception, write a result row with `active: false`, `relevance_score: 0`, and the exception message in `error_notes`; continue to the next URL
+- [x] **T-93** Enforce mutual exclusivity of `--resume` and `--new-only` at CLI parse time (exit with error if both are passed)
+- [x] **T-94** Error handling: wrap each URL's full pipeline execution in a try/except; on any uncaught exception, write a result row with `active: false`, `relevance_score: 0`, and the exception message in `error_notes`; continue to the next URL
 
 ---
 
@@ -194,27 +194,27 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Top-level CLI that wires all components together.
 
-- [ ] **T-100** `run.py` — `argparse` CLI with flags matching PRD §13:
+- [x] **T-100** `run.py` — `argparse` CLI with flags matching PRD §13:
   - `--depth` (default 2)
   - `--delay` (default 2.0)
   - `--output` (default `output/<YYYY-MM-DD>/`)
   - `--resume`
   - `--new-only`
   - `--input` (default `config/urls.csv`)
-- [ ] **T-101** Startup check: if `config/state_definitions.json` does not exist, print a clear error message pointing to the setup script and exit
-- [ ] **T-102** Main loop: for each URL in the ordered queue:
+- [x] **T-101** Startup check: if `config/state_definitions.json` does not exist, print a clear error message pointing to the setup script and exit
+- [x] **T-102** Main loop: for each URL in the ordered queue:
   1. Check `RobotsChecker` → record `robots_allowed`, `robots_status`
   2. Fetch seed URL → record `active`, `http_status`, `final_url`, `js_rendered`
   3. If inactive (non-200 or network error), write row immediately and continue
-  4. Run `PortalDetector` → record `portal_platform`
-  5. If portal detected: call the matching adapter → record `portal_dataset_count`, `portal_relevant_count`, `top_dataset_urls`, `relevance_score`, `matched_keywords`; skip to step 10
-  6. Run `StateTagger` → record `state`
+  4. Run `StateTagger` → record `state`; compute `effective_keywords` (needed by portal adapter and scorer)
+  5. Run `PortalDetector` → record `portal_platform`
+  6. If portal detected: call the matching adapter → record `portal_dataset_count`, `portal_relevant_count`, `top_dataset_urls`, `relevance_score`, `matched_keywords`; skip to step 10
   7. Run depth crawler → collect all visited pages
   8. Run `DatasetDetector` → record `datasets_found`, `dataset_urls`, `dataset_formats`
   9. Run `Scorer` → record `relevance_score`, `matched_keywords`
   10. Record `crawl_depth_reached`
   11. `ReportWriter.append_row(result)`
-- [ ] **T-103** Logging: use Python `logging` module; emit `INFO` for each URL processed, `WARNING` for robots unavailable and duplicates/skips, `ERROR` for per-URL failures
+- [x] **T-103** Logging: use Python `logging` module; emit `INFO` for each URL processed, `WARNING` for robots unavailable and duplicates/skips, `ERROR` for per-URL failures
 
 ---
 
@@ -223,12 +223,12 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 > Manual and scripted checks that the pipeline produces correct output before handing off.
 
 - [ ] **T-110** Run the setup script against `config/2022ISD.pdf` with either backend; verify `config/state_definitions.json` contains entries for all 50 states + DC with non-empty `census_terms`
-- [ ] **T-111** Smoke test: run `python run.py --input config/urls.csv --depth 1` against a 5-URL subset; verify `output/<date>/results.csv` has correct columns and one row per URL
-- [ ] **T-112** Verify state tagging: confirm a `*.state.tx.us` URL → `TX`, a `sco.ca.gov` URL → `CA`, a `census.gov` URL → `FEDERAL`, and an untaggable URL → `NATIONAL`
-- [ ] **T-113** Verify scorer: a page with Census keywords in its `<h1>` should score higher than an identical page with keywords only in body text
-- [ ] **T-114** Verify dataset detection: a page containing `<a href="data.csv">` should produce `datasets_found: true`, `dataset_formats: csv`
-- [ ] **T-115** Verify `--resume`: kill the process mid-run; restart with `--resume`; confirm no URL is processed twice in the output CSV
-- [ ] **T-116** Verify `--new-only`: add a new URL to `config/urls.csv`; run with `--new-only`; confirm only the new URL is processed
+- [x] **T-111** Smoke test: run `python run.py --input config/urls.csv --depth 1` against a 5-URL subset; verify `output/<date>/results.csv` has correct columns and one row per URL. Extended: full run of 248 URLs (26 complete states + FEDERAL + NATIONAL) executed 2026-06-03 — see NOTES.md Phase 11 section
+- [x] **T-112** Verify state tagging: confirm a `*.state.tx.us` URL → `TX`, a `sco.ca.gov` URL → `CA`, a `census.gov` URL → `FEDERAL`, and an untaggable URL → `NATIONAL`
+- [x] **T-113** Verify scorer: a page with Census keywords in its `<h1>` should score higher than an identical page with keywords only in body text
+- [x] **T-114** Verify dataset detection: a page containing `<a href="data.csv">` should produce `datasets_found: true`, `dataset_formats: csv`
+- [x] **T-115** Verify `--resume`: kill the process mid-run; restart with `--resume`; confirm no URL is processed twice in the output CSV
+- [x] **T-116** Verify `--new-only`: add a new URL to `config/urls.csv`; run with `--new-only`; confirm only the new URL is processed
 - [ ] **T-117** Verify portal detection: confirm a known Socrata portal URL produces `portal_platform: Socrata` and non-zero `portal_dataset_count`; confirm a CKAN portal produces `portal_platform: CKAN`; confirm a non-portal URL produces an empty `portal_platform`
 
 ---
