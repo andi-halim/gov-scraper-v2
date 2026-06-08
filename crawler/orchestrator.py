@@ -5,11 +5,11 @@ from collections import deque
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-import tldextract
 from bs4 import BeautifulSoup
 
 from crawler.http_client import HttpClient
 from page_result import PageResult
+from utils import registered_domain as _registered_domain
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +64,6 @@ def load_urls(csv_path: str) -> list[dict]:
 
     rows.sort(key=lambda r: 0 if r["priority"] else 1)
     return rows
-
-
-# Convert below function into a util at Phase 10
-def _registered_domain(url: str) -> str:
-    ext = tldextract.extract(url)
-    if ext.suffix:
-        return f"{ext.domain}.{ext.suffix}"
-    return ext.domain or url
 
 
 def _extract_links(html: str, base_url: str) -> list[str]:

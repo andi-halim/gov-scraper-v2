@@ -1,4 +1,17 @@
 ﻿RESOURCE_NAME,WEB_ADDRESS,PRIORITY_RESOURCE,STATE
+Open Alabama,https://data.algeohub.opendata.arcgis.com/,,AL
+Alaska Open Data Portal,https://gis.data.alaska.gov/,,AK
+Arizona Open Data Portal,https://azgeo-open-data-agic.hub.arcgis.com/,,AZ
+Arkansas Open Data, https://gis.arkansas.gov/,,AR
+California Open Data Portal, https://data.ca.gov/,,CA
+Colorado Information Marketplace, https://data.colorado.gov/,,CO
+Connecticut Open Data,https://data.ct.gov/,,CT
+Delaware Open Data,https://data.delaware.gov/,,DE
+Open Data DC,https://opendata.dc.gov/,,DC
+Florida Open Data,https://www.floridadata.org/,,FL
+Georgia Open Data,https://data.georgia.gov/,,GA
+Hawaii Open Data,https://data.hawaii.gov/,,HI
+Idaho Geospatial Data Clearinghouse,https://gis.idaho.gov/,,ID
 "Advocates for Calm Traffic (Norwalk, CT)",http://calmtraffic.org/NonprofitsandNeighborhoodAssociationsinNorwalk.htm,,CT
 Airports Council International - North America,http://www.aci-na.org/,,NATIONAL
 "AK Dept of Commerce, Municipal Directory",http://www.commerce.state.ak.us/dca/MuniDirPublic/MODP.htm,,AK
@@ -9,7 +22,7 @@ Alabama Dept of Conservation & Natural Resources,http://www.outdooralabama.com/,
 Alabama Dept of Mental Health,http://www.mh.alabama.gov/,,AL
 Alabama Hospital Association - Directory,https://www.alaha.org/resources/hospital-directory/,,AL
 Alabama Natural Gas Association - Membership List,http://alnga.org/,,AL
-Alabama One Call - Membership List,www.al1call.com/membership_list.doc,,AL
+Alabama One Call - Membership List,http://www.al1call.com/membership_list.doc,,AL
 Alabama Public Service Commission,http://www.psc.state.al.us/,,AL
 Alabama Safe Drinking Water Information System (SDWIS),https://ofmpub.epa.gov/apex/sfdw/f?p=108:200::::::,,AL
 Alabama Secretary of State,https://sos.alabama.gov/,,AL
@@ -23,7 +36,7 @@ American Public Transportaion Association,https://www.apta.com/research-technica
 American Public Transportation Association (APTA) online,http://publictransportation.org/tools/,,NATIONAL
 American Water Works Association,http://sourcebook.awwa.org/,,NATIONAL
 AR Local Police and Fire Retirement System,https://lopfi-prb.com/,,AR
-AR Public Employees Retirement System,www.apers.org,,AR
+AR Public Employees Retirement System,https://www.apers.org,,AR
 Arizona Dept of Forestry and Fire Management,http://dffm.az.gov/fire-marshal/firefighter-relief-and-pension-fund,,AZ
 Arizona Dept of Water Resources,http://www.azwater.gov/azdwr/default.aspx,,AZ
 Arizona Fire District Association,http://www.afdanews.org/,,AZ
@@ -34,7 +47,7 @@ Arkansas Department of Aeronautics,http://www.fly.arkansas.gov/,,AR
 Arkansas Department of Environmental Quality,http://www.adeq.state.ar.us/home/pdssql/pds.asp,,AR
 Arkansas Department of Finance and Administration,http://www.dfa.arkansas.gov/Pages/default.aspx,,AR
 ARKANSAS HOUSING AUTHORITY,https://arnahro.org/membership/,,AR
-Arkansas Insurance Department,www.insurance.arkansas.gov,,AR
+Arkansas Insurance Department,https://www.insurance.arkansas.gov,,AR
 Arkansas Secretary of State,http://www.sos.arkansas.gov/corps/search_all.php,,AR
 Arkansas State Highway & Transportation Dept,http://www.arkansashighways.com/,,AR
 Arkansas State Treasury - Local Government,http://www.artreasury.gov/,,AR
@@ -150,8 +163,8 @@ Kansas Rural Water Association,https://krwa.net/ONLINE-RESOURCES/RWD-Maps,,KS
 Kentucky Dept for Natural Resources,http://conservation.ky.gov/Pages/default.aspx,,KY
 Kentucky Dept of Revenue,http://revenue.ky.gov/,,KY
 Kentucky Finance & Administration Cabinet (social security office),http://finance.ky.gov/,,KY
-Kentucky League of Cities,www.klc.org,,KY
-"Kentucky Office of the Governor, Department for Local Government",www.dlg.ky.gov,YES,KY
+Kentucky League of Cities,https://www.klc.org,,KY
+"Kentucky Office of the Governor, Department for Local Government",https://www.dlg.ky.gov,YES,KY
 Kentucky Public Service Commission,http://psc.ky.gov/,,KY
 Kentucky Retirement Systems,https://kyret.ky.gov,,KY
 KY Division of Local Govt Services,http://finance.ky.gov/offices/controller/Pages/dlgservices.aspx,,KY
@@ -162,7 +175,7 @@ LA State Legislature Boards & Commissions List,http://www.legis.state.la.us/boar
 League of Arizona Cities and Towns,http://www.leagueaz.org/,,AZ
 League of Oregon Cities,https://www.orcities.org/resources/reference/city-directory,,OR
 Legislative Joint Auditing Committee - Division of Legislative Audit,http://www.arklegaudit.gov/,YES,AK
-Links to State Library Associations,http://www2.lib.udel.edu/dla/dellib.htm,,DEL
+Links to State Library Associations,http://www2.lib.udel.edu/dla/dellib.htm,,DE
 Local.Arkansas.gov,http://local.arkansas.gov/index.php,,AR
 Louisiana Asset Management Pool - membership list,http://www.lamppool.com/participants.asp,,LA
 Louisiana Association of Planning and Development Districts,http://www.lapdd.org/,,LA
@@ -185,7 +198,7 @@ Massachusetts Dept of Transportation,http://www.massdot.state.ma.us/main/main.as
 Massachusetts Division of Conservation Services,http://www.mass.gov/?pageID=eoeeaterminal&L=2&L0=Home&L1=Agriculture%2C+Forestry%2C+Fishing+%26+Hunting&sid=Eoeea&b=terminalcontent&f=eea_dcs_dcs_consdistricts&csid=Eoeea,,MA
 Massachusetts Division of Local Services,https://dlsgateway.dor.state.ma.us/gateway/Public/WebForms/Login.aspx,,MA
 MassHome - Fire Dept Listing,http://www.masshome.com/fire.html#State,,MA
-MD Association of Counties,rclark@mdcounties.org,,MD
+MD Association of Counties,,,MD
 MD Association of Soil Conservation Districts,http://www.mascd.net/Jan09/districts.htm,,MD
 MD Department of Agriculture website (Office of Resource Conservation),,,MD
 "MD Dept of Agriculture, state soil conservation committee",http://www.mda.state.md.us/boards_comms/md_soil_conservation_committee.php,,MD
@@ -204,22 +217,22 @@ Minnesota Association of Soil & Water Districts,https://www.maswcd.org/,,MN
 Minnesota Association of Watershed Districts,http://www.mnwatershed.org/,,MN
 Minnesota Legislative Commission on Pensions and Retirement,https://www.lcpr.leg.mn/,YES,MN
 "Mississippi Department of Archives and History, Government Records, Local Government",https://www.mdah.ms.gov/local-government,,MS
-Mississippi Municipal League,www.mmlonline.com,,MS
+Mississippi Municipal League,https://www.mmlonline.com,,MS
 Mississippi Office of the Secretary of State,https://www.sos.ms.gov/Pages/default.aspx,,MS
 Mississippi Office of the State Auditor,https://www.osa.ms.gov/reports/,,MS
 Mississippi Public Service Commission service locator,http://www.psc.state.wv.us/utilities/,,WV
 Mississippi Soil & Water Conservation Commission - District List,https://www.mswcc.ms.gov/SitePages/Services.aspx,,MS
 Missouri Association of Counties,http://www.mocounties.com/,,MO
 Missouri Levee & Drainage District Association,http://www.mldda.org/,,MO
-Missouri Municipal League,www.mocities.com,,MO
-"Missouri Office of Administration, Office of Budget & Planning",oa.mo.gov,,MO
+Missouri Municipal League,https://www.mocities.com,,MO
+"Missouri Office of Administration, Office of Budget & Planning",https://oa.mo.gov,,MO
 Missouri Office of the Secretary of State,http://www.sos.mo.gov/,,MO
 Missouri State Tax Commission,http://www.stc.mo.gov/,,MO
 MN Department of Education,http://w20.education.state.mn.us/MdeOrgView/districts/index,,MN
 MN Department of Human Services,,,MN
 MN State Auditor's Office,http://taxes.state.mn.us/property_tax_administrators/pages/general_reports_data_content_property_tax_statistics.aspx,YES,MN
 MN State Auditors office - Pensions Division,http://www.osa.state.mn.us/,,MN
-"MO Dept of Economic Development, Office of Business & Community Services",www.ded.mo.gov,,MO
+"MO Dept of Economic Development, Office of Business & Community Services",https://www.ded.mo.gov,,MO
 "MO Dept of Natural Resources, Public Drinking Water Branch",http://www.dnr.mo.gov/eservices.htm,,MO
 "MO Dept of Natural Resources, Soil & Water Conservation Program",http://dnr.mo.gov/aboutus.htm,,MO
 MO Dept of Revenue,,,MO
@@ -275,10 +288,10 @@ Office of the Comptroller - Records Access Officer (RAO),,,NATIONAL
 Office of the Comptroller of MD,,,MD
 Office of the New York State Comptroller Office,http://www.osc.state.ny.us/localgov/,YES,NY
 "Ohio Auditor of State, Local Government Services Division",https://ohioauditor.gov/,YES,OH
-"Ohio Auditor of State, Northeast Division",www.ohioauditor.gov,,OH
+"Ohio Auditor of State, Northeast Division",https://www.ohioauditor.gov,,OH
 "Ohio Department of Commerce, Division of State Fire Marshal",http://www.com.ohio.gov/fire/,,OH
 Ohio Department of Education,http://education.ohio.gov/GD/Templates/Pages/ODE/ODEDetail.aspx?page=3&TopicRelationID=376&ContentID=8244&Content=122713,,OH
-Ohio Municipal League,www.omlohio.org,,OH
+Ohio Municipal League,https://www.omlohio.org,,OH
 Oklahoma Comptroller,http://www.ok.gov/OSF/Comptroller/,,OK
 Oklahoma Department of Libraries,http://www.odl.state.ok.us/,,OK
 Oklahoma EMS Division Certified and Licensed Agency Registry,https://www.ok.gov/health/Protective_Health/Emergency_Systems/EMS_Division/index.html,YES,OK
@@ -289,7 +302,7 @@ Oregon Public Health - Drinking Water Services,https://yourwater.oregon.gov/,,OR
 Oregon Secretary of State - Archives Division,https://sos.oregon.gov/blue-book/Pages/default.aspx,,OR
 Oregon Secretary of State - Audits Division,https://secure.sos.state.or.us/muni/public.do,YES,OR
 PA Dept of Community & Economic Development - Local Government,https://apps.dced.pa.gov/Munstats-public/findmunicipality.aspx,YES,PA
-PA Auditor General - Municipal Pension Plan,Resources for Municipal Pension Plans - Pennsylvania Department of the Auditor General,,PA
+PA Auditor General - Municipal Pension Plan,,,PA
 Ports Association of Louisiana,http://portsoflouisiana.org/member-directory/corporate-members/,,LA
 Public Employees' Retirement System of Nevada,https://www.nvpers.org/front,,NV
 Public Service Commission,http://psc.wi.gov/,,WI
@@ -309,7 +322,7 @@ South Carolina Association of Counties,http://www.sccounties.org/home,,SC
 South Carolina Association of Special Purpose Districts,http://www.scspd.com/.,,SC
 South Carolina Office of the State Auditor,http://osa.sc.gov,,SC
 South Carolina Public Employee Benefit Authority,http://www.retirement.sc.gov,,SC
-South Dakota Association of Towns and Townships,www.sdtownships.com,,SD
+South Dakota Association of Towns and Townships,https://www.sdtownships.com,,SD
 South Dakota Department of Public Safety,http://dps.sd.gov/,,SD
 South Dakota Municipal League (SDML),http://www.sdauditor.gov/Default.aspx,,SD
 South Dakota Office of the State Auditor,http://www.sdauditor.gov/EmpDirectory.aspx,YES,SD
@@ -369,5 +382,5 @@ WV State Auditor's Office - State Auditor's Chief Inspector Division,http://www.
 Wyoming Retirement System,,,WY
 "Wyoming State Auditor's Office, CAFR Division",,,WY
 Yavapai County Special Districts Administration,http://www.co.yavapai.az.us/sd.aspx,,AZ
-Junta de Supervision y Administraction Financiera para Puerto Rico (Puerto Rico's Financial Oversight & Management Board),oversightboard.pr.gov,,PR
+Junta de Supervision y Administraction Financiera para Puerto Rico (Puerto Rico's Financial Oversight & Management Board),https://oversightboard.pr.gov,,PR
 Oficina de Gerencia Y Presupuesto (Puerto Rico Office of Management & Budget),https://ogp.pr.gov,,PR

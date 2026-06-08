@@ -2,6 +2,16 @@
 import re
 import unicodedata
 
+import tldextract
+
+
+def registered_domain(url: str) -> str:
+    """Return the registered domain (e.g. 'example.gov') for a URL."""
+    ext = tldextract.extract(url)
+    if ext.suffix:
+        return f"{ext.domain}.{ext.suffix}"
+    return ext.domain or url
+
 
 def normalize_text(text: str) -> str:
     """NFC-normalize, strip diacritics, and lowercase a string."""

@@ -4,8 +4,8 @@ import logging
 import unicodedata
 
 import httpx
-import tldextract
 from bs4 import BeautifulSoup
+from utils import registered_domain as _registered_domain
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +81,6 @@ class HttpClient:
             timeout=httpx.Timeout(_CONNECT_TIMEOUT, read=_READ_TIMEOUT),
         )
     
-    # Convert below function into a util at Phase 10
-    def _registered_domain(self, url: str) -> str:
-        ext = tldextract.extract(url)
-        if ext.suffix:
-            return f"{ext.domain}.{ext.suffix}"
-        return ext.domain or url
-
     def _wait_for_rate_limit(self, domain: str) -> None:
         last = self._last_request.get(domain, 0.0)
         wait = self._delay - (time.monotonic() - last)
@@ -95,7 +88,7 @@ class HttpClient:
             time.sleep(wait)
 
     def get(self, url: str, **kwargs) -> httpx.Response:
-        domain = self._registered_domain(url)
+        domain = _registered_domain(url)
         self._wait_for_rate_limit(domain)
 
         last_response: httpx.Response | None = None
@@ -122,7 +115,7 @@ class HttpClient:
 
     def head(self, url: str, **kwargs) -> httpx.Response:
         """T-61: Issue a HEAD request with rate limiting. No response body is downloaded."""
-        domain = self._registered_domain(url)
+        domain = _registered_domain(url)
         self._wait_for_rate_limit(domain)
         self._last_request[domain] = time.monotonic()
         return self._client.head(url, **kwargs)

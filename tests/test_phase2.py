@@ -7,6 +7,7 @@ import httpx
 
 from crawler.http_client import HttpClient, USER_AGENT, DEFAULT_DELAY, _RETRY_STATUSES
 from crawler.robots import RobotsChecker
+from utils import registered_domain
 
 
 def make_response(status: int, text: str = "") -> httpx.Response:
@@ -31,27 +32,23 @@ class TestHttpClientUserAgent:
         assert "andihalim00@gmail.com" in USER_AGENT
 
 
-class TestHttpClientRegisteredDomain:
-    def setup_method(self):
-        self.client = HttpClient(delay=0)
-
+class TestRegisteredDomain:
     def test_standard_dotgov(self):
-        assert self.client._registered_domain("https://www.texas.gov/page") == "texas.gov"
+        assert registered_domain("https://www.texas.gov/page") == "texas.gov"
 
     def test_state_subdomain(self):
-        assert self.client._registered_domain("http://data.state.tx.us/") == "state.tx.us"
+        assert registered_domain("http://data.state.tx.us/") == "state.tx.us"
 
     def test_no_subdomain(self):
-        assert self.client._registered_domain("https://michigan.gov/") == "michigan.gov"
+        assert registered_domain("https://michigan.gov/") == "michigan.gov"
 
     def test_two_different_subdomains_same_registered_domain(self):
-        d1 = self.client._registered_domain("https://city1.example.gov/")
-        d2 = self.client._registered_domain("https://city2.example.gov/")
+        d1 = registered_domain("https://city1.example.gov/")
+        d2 = registered_domain("https://city2.example.gov/")
         assert d1 == d2
 
     def test_localhost_no_suffix(self):
-        result = self.client._registered_domain("http://localhost/path")
-        assert result == "localhost"
+        assert registered_domain("http://localhost/path") == "localhost"
 
 
 class TestHttpClientRateLimiting:
