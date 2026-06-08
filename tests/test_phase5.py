@@ -391,6 +391,81 @@ class TestRedirectDeduplication:
 
 
 # ---------------------------------------------------------------------------
+# prefetched_seed parameter
+# ---------------------------------------------------------------------------
+
+class TestCrawlUrlPrefetchedSeed:
+    def _seed_html(self, links: list[str]) -> str:
+        hrefs = "".join(f'<a href="{u}">link</a>' for u in links)
+        return f"<html><body>{hrefs}</body></html>"
+
+    def test_seed_not_re_fetched_when_prefetched(self):
+        seed = "https://example.gov/"
+        client = _make_client({seed: ("<html>should not be fetched</html>", seed, 200, False)})
+        html = "<html><body>prefetched content</body></html>"
+        crawl_url(seed, client, depth=1, prefetched_seed=(html, seed, 200, False))
+        client.fetch_page.assert_not_called()
+
+    def test_prefetched_html_appears_in_pages(self):
+        seed = "https://example.gov/"
+        client = _make_client({})
+        html = "<html><body>prefetched content</body></html>"
+        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, seed, 200, False))
+        assert pages[0][1] == html
+        assert pages[0][2] == 200
+
+    def test_prefetched_seed_links_followed_at_hop1(self):
+        seed = "https://example.gov/"
+        child = "https://example.gov/child"
+        seed_html = self._seed_html([child])
+        client = _make_client({child: ("<html><body>child</body></html>", child, 200, False)})
+        pages, depth = crawl_url(seed, client, depth=1, prefetched_seed=(seed_html, seed, 200, False))
+        urls = [p[0] for p in pages]
+        assert seed in urls
+        assert child in urls
+        assert depth == 1
+
+    def test_prefetched_seed_non_200_no_children_crawled(self):
+        seed = "https://example.gov/"
+        child = "https://example.gov/child"
+        client = _make_client({child: ("<html>child</html>", child, 200, False)})
+        pages, depth = crawl_url(seed, client, depth=1,
+                                  prefetched_seed=(self._seed_html([child]), seed, 403, False))
+        assert len(pages) == 1
+        assert depth == 0
+        client.fetch_page.assert_not_called()
+
+    def test_prefetched_seed_depth_zero_no_children(self):
+        seed = "https://example.gov/"
+        child = "https://example.gov/child"
+        client = _make_client({child: ("<html>child</html>", child, 200, False)})
+        pages, _ = crawl_url(seed, client, depth=0,
+                              prefetched_seed=(self._seed_html([child]), seed, 200, False))
+        assert len(pages) == 1
+        client.fetch_page.assert_not_called()
+
+    def test_prefetched_redirect_final_url_tracked(self):
+        seed = "http://example.gov/"
+        final = "https://example.gov/"
+        child = "https://example.gov/about"
+        html = self._seed_html([child])
+        client = _make_client({child: ("<html><body>about</body></html>", child, 200, False)})
+        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, final, 200, False))
+        assert pages[0][0] == seed
+        fetched_urls = [p[0] for p in pages]
+        assert child in fetched_urls
+        # final (redirect target) must not appear as a separate fetched page
+        assert fetched_urls.count(final) == 0
+
+    def test_none_prefetched_seed_behaves_as_before(self):
+        seed = "https://example.gov/"
+        client = _make_client({seed: ("<html><body>fetched</body></html>", seed, 200, False)})
+        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=None)
+        client.fetch_page.assert_called()
+        assert pages[0][2] == 200
+
+
+# ---------------------------------------------------------------------------
 # Issue 3 fix: _extract_links logs on parse failure
 # ---------------------------------------------------------------------------
 

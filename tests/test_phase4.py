@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from crawler.http_client import HttpClient, _is_js_heavy, _visible_text
+from crawler.http_client import (
+    HttpClient, _is_bot_challenge, _is_js_heavy, _visible_text, _AZURE_WAF_BODY_RE,
+)
 from crawler.portal_detector import PortalDetector
 from portals import score_metadata
 from portals.socrata import SocrataAdapter
@@ -150,6 +152,96 @@ class TestFetchPage:
             _, _, status, rendered = client.fetch_page("http://example.gov/api")
         mock_pw.assert_not_called()
         assert not rendered
+
+    def test_cloudflare_403_triggers_playwright_bypass(self):
+        resp = make_response(403, "<html>cf challenge</html>", {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        real_html = "<html><body>" + "word " * 60 + "</body></html>"
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", return_value=real_html):
+            html, _, status, rendered = client.fetch_page("http://example.gov/")
+        assert rendered
+        assert status == 200
+        assert html == real_html
+
+    def test_cloudflare_403_playwright_also_blocked_keeps_original_status(self):
+        cf_html = "<html><body><script>window._cf_chl_opt={}</script></body></html>"
+        resp = make_response(403, cf_html, {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", return_value=cf_html):
+            _, _, status, rendered = client.fetch_page("http://example.gov/")
+        assert not rendered
+        assert status == 403
+
+    def test_cloudflare_403_playwright_exception_falls_back(self):
+        resp = make_response(403, "<html>blocked</html>", {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", side_effect=RuntimeError("browser crash")):
+            html, _, status, rendered = client.fetch_page("http://example.gov/")
+        assert not rendered
+        assert status == 403
+        assert html == "<html>blocked</html>"
+
+    def test_js_heavy_and_bot_challenge_triggers_playwright_only_once(self):
+        cf_sparse = "<html><body><div id='root'><script>window._cf_chl_opt={}</script></div></body></html>"
+        resp = make_response(200, cf_sparse, {"content-type": "text/html", "cf-ray": "abc"})
+        client = self._make_client(resp)
+        real_html = "<html><body>" + "word " * 60 + "</body></html>"
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", return_value=real_html) as mock_pw:
+            with patch("crawler.http_client._is_js_heavy", return_value=True):
+                _, _, _, rendered = client.fetch_page("http://example.gov/")
+        assert mock_pw.call_count == 1
+        assert rendered
+
+
+# ---------------------------------------------------------------------------
+# _is_bot_challenge
+# ---------------------------------------------------------------------------
+
+class TestIsBotChallenge:
+    def test_cloudflare_cf_ray_header_and_403(self):
+        assert _is_bot_challenge("<html>blocked</html>", 403, {"cf-ray": "abc123-LAX"})
+
+    def test_cloudflare_server_header_and_403(self):
+        assert _is_bot_challenge("<html>blocked</html>", 403, {"server": "cloudflare"})
+
+    def test_cloudflare_body_token_any_status(self):
+        html = "<html><body><script>window._cf_chl_opt={chl:'abc'}</script></body></html>"
+        assert _is_bot_challenge(html, 200, {})
+
+    def test_cloudflare_cf_browser_verification_body(self):
+        html = '<html><body><div id="cf-browser-verification"></div></body></html>'
+        assert _is_bot_challenge(html, 403, {})
+
+    def test_cloudflare_200_with_cf_ray_no_body_token_not_flagged(self):
+        # cf-ray on a real 200 page (CDN hit, not a challenge) must not trigger retry
+        assert not _is_bot_challenge("<html><body>Real page content</body></html>", 200, {"cf-ray": "abc"})
+
+    def test_akamai_403_flagged(self):
+        assert _is_bot_challenge("<html>Access Denied</html>", 403, {"server": "AkamaiGHost"})
+
+    def test_akamai_200_not_flagged(self):
+        assert not _is_bot_challenge("<html>Real page</html>", 200, {"server": "AkamaiGHost"})
+
+    def test_plain_403_no_cdn_headers_not_flagged(self):
+        assert not _is_bot_challenge("<html>403 Forbidden</html>", 403, {"server": "nginx"})
+
+    def test_empty_html_and_headers(self):
+        assert not _is_bot_challenge("", 200, {})
+
+    def test_header_keys_are_case_insensitive(self):
+        assert _is_bot_challenge("<html>blocked</html>", 403, {"CF-Ray": "abc123", "Server": "Cloudflare"})
+
+    def test_azure_waf_body_token_flagged(self):
+        html = '<!doctype html><html><head><meta name="description" content="Azure WAF JS Challenge"/></head></html>'
+        assert _is_bot_challenge(html, 403, {})
+
+    def test_azure_waf_body_token_case_insensitive(self):
+        assert _AZURE_WAF_BODY_RE.search("azure waf js challenge")
+        assert _AZURE_WAF_BODY_RE.search("AZURE WAF JS CHALLENGE")
 
 
 # ---------------------------------------------------------------------------

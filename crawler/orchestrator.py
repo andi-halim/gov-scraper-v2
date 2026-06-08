@@ -101,6 +101,7 @@ def crawl_url(
     seed_url: str,
     http_client: HttpClient,
     depth: int = 2,
+    prefetched_seed: tuple | None = None,
 ) -> tuple[list[PageResult], int]:
     """T-50/T-51/T-52: BFS depth crawler.
 
@@ -110,16 +111,34 @@ def crawl_url(
     pages: list of (url, html, http_status, js_rendered) for every URL attempted.
     crawl_depth_reached: deepest hop level with at least one HTTP-200 response
                          (0 if the seed itself failed or only seed succeeded).
+
+    If prefetched_seed=(html, final_url, http_status, js_rendered) is supplied,
+    the seed URL is not re-fetched — its result is used directly and child links
+    are enqueued at hop 1. This avoids a duplicate network request when the
+    caller already fetched the seed for an activity check.
     """
     pages: list[PageResult] = []
     visited: set[str] = set()
     crawl_depth_reached = 0
 
     seed_domain = _registered_domain(seed_url)
+    visited.add(seed_url)
 
     # BFS queue: (url, hop_depth)
-    queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
-    visited.add(seed_url)
+    queue: deque[tuple[str, int]] = deque()
+
+    if prefetched_seed is not None:
+        html, final_url, http_status, js_rendered = prefetched_seed
+        pages.append(PageResult(seed_url, html, http_status, js_rendered))
+        if final_url != seed_url:
+            visited.add(final_url)
+        if http_status == 200 and depth > 0:
+            for link in _extract_links(html, final_url):
+                if link not in visited and _registered_domain(link) == seed_domain:
+                    visited.add(link)
+                    queue.append((link, 1))
+    else:
+        queue.append((seed_url, 0))
 
     while queue:
         url, hop = queue.popleft()

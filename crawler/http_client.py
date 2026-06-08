@@ -20,6 +20,12 @@ _BACKOFF_SCHEDULE = (1, 2, 4)
 _MIN_VISIBLE_TEXT = 200
 _JS_ROOT_RE = re.compile(r'<div\s+id=["\'](?:root|app)["\']', re.IGNORECASE)
 
+_CF_HEADER = "cf-ray"
+_CF_SERVER = "cloudflare"
+_AKAMAI_SERVER = "akamaiGHost"
+_CF_BODY_RE = re.compile(r'window\._cf_chl_opt|cf-browser-verification', re.IGNORECASE)
+_AZURE_WAF_BODY_RE = re.compile(r'Azure WAF JS Challenge', re.IGNORECASE)
+
 
 def _visible_text(html: str) -> str:
     try:
@@ -40,6 +46,25 @@ def _is_js_heavy(html: str, content_type: str) -> bool:
         return True
     # SPA root container with minimal surrounding text
     if _JS_ROOT_RE.search(html) and len(visible) < _MIN_VISIBLE_TEXT * 2:
+        return True
+    return False
+
+
+def _is_bot_challenge(html: str, status_code: int, headers: dict) -> bool:
+    """Returns True if the response is a CDN bot-protection challenge (Cloudflare, Akamai).
+
+    Only fires on 403 for header-based signals so that legitimate Cloudflare-proxied
+    200 responses are not mistakenly retried. Body tokens fire on any status to catch
+    Cloudflare JS challenges served as 200.
+    """
+    lower = {k.lower(): v.lower() for k, v in (headers or {}).items()}
+    server = lower.get("server", "")
+    is_cloudflare = _CF_HEADER in lower or _CF_SERVER in server
+    if is_cloudflare and status_code == 403:
+        return True
+    if html and (_CF_BODY_RE.search(html) or _AZURE_WAF_BODY_RE.search(html)):
+        return True
+    if _AKAMAI_SERVER.lower() in server and status_code == 403:
         return True
     return False
 
@@ -103,7 +128,7 @@ class HttpClient:
         return self._client.head(url, **kwargs)
 
     def fetch_page(self, url: str) -> tuple[str, str, int, bool]:
-        """T-40: GET url, falling back to Playwright for JS-heavy pages.
+        """T-40: GET url, falling back to Playwright for JS-heavy or bot-challenged pages.
 
         Returns (html, final_url, http_status, js_rendered).
         Network errors propagate to the caller.
@@ -114,17 +139,33 @@ class HttpClient:
         final_url = str(response.url)
         http_status = response.status_code
         js_rendered = False
+        _playwright_tried = False
 
         if http_status == 200:
             content_type = response.headers.get("content-type", "")
             ct_base = (content_type or "").lower().split(";")[0].strip()
             if _is_js_heavy(html, content_type) and (not ct_base or ct_base == "text/html"):
+                _playwright_tried = True
                 try:
                     from crawler.playwright_client import fetch_rendered
                     html = fetch_rendered(final_url)
                     js_rendered = True
                 except Exception as exc:
                     logger.warning("Playwright render failed for %s: %s", url, exc)
+
+        headers = self.last_response_headers
+        if not _playwright_tried and _is_bot_challenge(html, http_status, headers):
+            try:
+                from crawler.playwright_client import fetch_rendered
+                pw_html = fetch_rendered(final_url)
+                if not _is_bot_challenge(pw_html, 200, {}):
+                    html = pw_html
+                    http_status = 200
+                    js_rendered = True
+                else:
+                    logger.warning("Playwright did not bypass bot protection for %s", url)
+            except Exception as exc:
+                logger.warning("Playwright bot-bypass attempt failed for %s: %s", url, exc)
 
         return html, final_url, http_status, js_rendered
 

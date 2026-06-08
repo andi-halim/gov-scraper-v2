@@ -533,6 +533,22 @@ class TestProcessUrlStandardPipeline:
             )
         assert result["js_rendered"] is True
 
+    def test_prefetched_seed_passed_to_crawl_url(self):
+        client = _make_http_client(html=_RICH_HTML, final_url="https://example.gov/",
+                                   http_status=200, js_rendered=True)
+        portal = _make_portal_detector(platform=None)
+        with patch("run.crawl_url", return_value=([], 0)) as mock_crawl, \
+             patch("run.detect_datasets", return_value=(False, [], [])), \
+             patch("run.score_page", return_value=_score_result()), \
+             patch("run.get_effective_keywords", return_value=frozenset()):
+            _process_url(
+                url="https://example.gov/", priority=False, state="NATIONAL",
+                http_client=client, robots_checker=_make_robots(),
+                portal_detector=portal, depth=2,
+            )
+        _, kwargs = mock_crawl.call_args
+        assert kwargs.get("prefetched_seed") == (_RICH_HTML, "https://example.gov/", 200, True)
+
     def test_priority_flag_preserved(self):
         client = _make_http_client()
         with patch("run.crawl_url", return_value=([], 0)), \

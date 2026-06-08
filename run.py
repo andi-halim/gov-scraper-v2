@@ -241,8 +241,11 @@ def _process_url(
         result["relevance_score"] = portal_result.get("relevance_score", 0)
         return result
 
-    # Step 6: depth crawl (no portal detected)
-    pages, crawl_depth_reached = crawl_url(url, http_client, depth=depth)
+    # Step 6: depth crawl — pass pre-fetched seed to avoid re-fetching it
+    pages, crawl_depth_reached = crawl_url(
+        url, http_client, depth=depth,
+        prefetched_seed=(html, final_url, http_status, js_rendered),
+    )
     result["crawl_depth_reached"] = crawl_depth_reached
 
     # Step 7: dataset detection

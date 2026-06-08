@@ -115,3 +115,38 @@ python run.py --input /tmp/test_urls.csv --depth 1 --delay 1.0 --output /tmp/gov
 | https://examiners.alabama.gov/audit_reports.aspx | **true** | AL | 3 | — | — |
 
 Output CSV: `/tmp/gov-scraper-test-run/results.csv` (5 rows, all 20 columns present)
+
+---
+
+## 2026-06-08
+
+### Bot-challenge Playwright bypass — implementation
+
+Added `_is_bot_challenge()` to `crawler/http_client.py` and updated `fetch_page()` to retry via Playwright when Cloudflare (403 + `cf-ray`/`Server: cloudflare`, or JS challenge body tokens) or Akamai (403 + `Server: AkamaiGHost`) signals are detected.
+
+```bash
+python -m pytest tests/test_phase4.py -v --tb=short
+```
+**Result:** 66 passed in 0.60s (13 new tests: `TestIsBotChallenge` ×10, `TestFetchPage` ×4 new)
+
+```bash
+python -m pytest tests/ -q --tb=short --ignore=tests/test_integration_urls.py
+```
+**Result:** 382 passed in 1.23s (was 369 — no regressions)
+
+### Azure WAF + double-fetch fix
+
+```bash
+python -m pytest tests/ -q --tb=short --ignore=tests/test_integration_urls.py
+```
+**Result:** 392 passed in 1.36s (was 382 — 10 new tests, no regressions)
+
+Smoke test re-run (`/tmp/cdn_test_urls.csv`, depth=1, delay=1s):
+
+| URL | active | js_rendered | score | note |
+|---|---|---|---|---|
+| http://www.michigan.gov/treasury | true | true | 0 | Akamai bypassed; score=0 is content-accurate (Treasury ≠ Census local-gov vocab) |
+| https://www.mass.gov/... | false | false | 0 | No CDN fingerprint — plain WAF 403, not detectable |
+| https://floridajobs.org/... | false | false | 0 | Azure WAF detected, Playwright tried but couldn't break through |
+
+Double-fetch confirmed fixed: michigan.gov now shows ONE httpx request (was two).

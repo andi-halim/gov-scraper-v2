@@ -5,17 +5,17 @@
 | 0 | Scaffolding (`requirements.txt`, `__init__.py` files) | Done |
 | 1 | `setup/generate_state_definitions.py` + `config/state_definitions.json` | Done |
 | 2 | `crawler/http_client.py`, `crawler/robots.py` | Done |
-| 3 | `crawler/state_tagger.py` | Done |
-| 4 | Page fetcher + JS detection + `crawler/playwright_client.py` | Done |
+| 3 | State tagging via `STATE` column in `urls.csv` (replaces auto-detection; `crawler/state_tagger.py` removed) | Done |
+| 4 | Page fetcher + JS detection + CDN bot-bypass + `crawler/playwright_client.py` | Done |
 | 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Done |
-| 5 | Depth crawler (`crawler/orchestrator.py`) | Done |
+| 5 | Depth crawler with `prefetched_seed` optimisation (`crawler/orchestrator.py`) | Done |
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
 | 8 | Input ingestion + priority queue (extends `crawler/orchestrator.py`) | Done |
 | 9 | Output writer + run modes (`reporter/writer.py`) | Done |
 | 10 | `run.py` entrypoint | Done |
 
-**Current state:** all phases complete. The full pipeline is wired in `run.py` and the test suite passes (433 unit tests, 18 integration tests skipped by default). Remaining open items are Phase 11 validation tasks T-110 and T-117 — T-110 requires completing the ISD setup script for all 51 states; T-117 requires a live integration run against known portal URLs.
+**Current state:** all phases complete. The full pipeline is wired in `run.py` and the test suite passes (392 unit tests, 18 integration tests skipped by default). Remaining open items are Phase 11 validation tasks T-110 and T-117 — T-110 requires completing the ISD setup script for all 51 states; T-117 requires a live integration run against known portal URLs.
 
 ### Phase 2 implementation notes
 
@@ -49,6 +49,19 @@
 **`crawler/playwright_client.py`**
 - `fetch_rendered(url)` is a thin synchronous wrapper over `asyncio.run(_render_async(url))`. Each call launches a fresh Chromium context and shuts it down on exit — no persistent browser session across URLs (T-42 spec).
 - The Playwright browser context uses the same `User-Agent` string as `HttpClient`.
+
+**`crawler/http_client.py` — `_is_bot_challenge()` and bot-bypass retry**
+- `_is_bot_challenge(html, status_code, headers)` detects CDN bot-protection challenges. It fires on: (a) Cloudflare `cf-ray` header or `Server: cloudflare` with HTTP 403; (b) Cloudflare JS challenge body tokens (`window._cf_chl_opt`, `cf-browser-verification`) on any status; (c) Akamai `Server: AkamaiGHost` with HTTP 403. Header-based signals are restricted to 403 to avoid retrying legitimate Cloudflare-proxied 200 responses.
+- `fetch_page()` tries Playwright when `_is_bot_challenge()` returns True, as a second fallback path distinct from the JS-heavy fallback. A `_playwright_tried` local flag prevents a double Playwright attempt when a page matches both conditions (e.g., a sparse Cloudflare challenge page also flagged by `_is_js_heavy()`).
+- For bot-bypass retries, the Playwright result is accepted only if `_is_bot_challenge(pw_html, 200, {})` is False — i.e., Playwright actually broke through. If the challenge persists in the rendered HTML, the original status and HTML are kept and a warning is logged.
+- If Playwright bypasses successfully, `http_status` is updated to 200 and `js_rendered` is set to True.
+- **Azure WAF** (`_AZURE_WAF_BODY_RE`): detects `"Azure WAF JS Challenge"` in the response body on any status. In practice Playwright cannot bypass Azure WAF's JS challenge (unlike Cloudflare's), so the bypass attempt is logged as a warning and the original 403 is kept. `floridajobs.org` exhibits this behaviour.
+- Politeness: this is consistent with `robots.txt` compliance — the bypass only fires when the site's stated `robots.txt` policy permits crawling; the CDN block is a heuristic layer, not the site's crawl policy. See discussion in NOTES.md under "Known site-specific behaviour" for the `michigan.gov` Akamai case.
+
+**`crawler/orchestrator.py` — `crawl_url()` `prefetched_seed` parameter**
+- `crawl_url()` accepts an optional `prefetched_seed=(html, final_url, http_status, js_rendered)` tuple. When provided, the seed URL is not re-fetched; its result is used directly as the first `pages` entry and child links are enqueued at hop 1. This eliminates the duplicate seed fetch that previously occurred between `run.py`'s activity check (step 2) and the depth crawler (step 6).
+- Without this fix, bot-bypassed URLs scored 0: Playwright succeeded in the activity check setting `active=True`, but the depth crawler's duplicate fetch would also trigger Playwright, and the second call often returned sparse content, leaving the scorer with no useful HTML.
+- `run.py` always passes `prefetched_seed=(html, final_url, http_status, js_rendered)` to `crawl_url()`.
 
 **`crawler/portal_detector.py` — `PortalDetector`**
 - `detect(html, headers, base_url)` runs a two-pass strategy: passive scan first (zero extra requests), active API probe only when passive is ambiguous (0 or ≥2 candidates).

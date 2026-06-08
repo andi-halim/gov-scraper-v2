@@ -68,9 +68,9 @@ To address this, `gov-scraper-v2` generates a per-state vocabulary file (`config
 ### FR-3: Activity Check
 
 - Issue an HTTP GET to the seed URL, following redirects automatically (httpx default behaviour).
-- **Active:** terminal response status is HTTP 200.
-- **Inactive:** terminal status is 4xx, 5xx, or any network-level failure (timeout, DNS error, connection refused).
-- Record `active: true/false`, `http_status` (terminal code), and `final_url` (resolved URL after all redirects).
+- **Active:** terminal response status is HTTP 200, including cases where a CDN bot-challenge (see FR-6) was bypassed via Playwright and the final rendered status is 200.
+- **Inactive:** terminal status is 4xx, 5xx, or any network-level failure (timeout, DNS error, connection refused), after any bot-bypass attempt has been exhausted.
+- Record `active: true/false`, `http_status` (terminal code after any bypass), and `final_url` (resolved URL after all redirects).
 
 ### FR-4: Polite Crawling
 
@@ -94,7 +94,14 @@ A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is avail
 - Attempt a plain HTTP fetch first (httpx).
 - Detect JS-heavy pages by checking: response body contains `<div id="root">` or `<div id="app">` with minimal text content, or `Content-Type` is not `text/html`, or rendered text length is less than 200 characters after stripping tags.
 - For detected JS-heavy pages, re-fetch using a headless Playwright browser to obtain the rendered DOM.
-- Record `js_rendered: true` in the output row when Playwright was used.
+- **CDN bot-challenge bypass:** after the plain HTTP fetch, also check for CDN bot-protection signals and retry with Playwright if detected. Supported platforms:
+  - **Cloudflare:** `cf-ray` response header or `Server: cloudflare` with HTTP 403; or Cloudflare JS challenge body tokens (`window._cf_chl_opt`, `cf-browser-verification`) on any status.
+  - **Akamai:** `Server: AkamaiGHost` with HTTP 403.
+  - **Azure WAF:** `Azure WAF JS Challenge` in the response body on any status.
+  - Header-based signals are restricted to 403 to avoid retrying legitimate CDN-proxied 200 responses. Body tokens fire on any status to catch JS challenges served as 200.
+  - The Playwright result is accepted only if the same bot-challenge signals are absent from the rendered HTML; if the challenge persists, the original 403 is kept and a warning is logged.
+  - Politeness: the bypass is consistent with `robots.txt` compliance — the CDN block is a heuristic layer, not the site's stated crawl policy. The bypass only fires after `robots.txt` has already been checked and access is permitted.
+- Record `js_rendered: true` in the output row when Playwright was used (covers both JS-heavy and bot-bypass cases).
 
 ### FR-7: State-Aware Keyword Relevance Scoring
 
@@ -307,13 +314,16 @@ config/urls.csv  (STATE column pre-populated by analyst)
   |      |                                  |
   | [RobotsChecker]                         |
   |      |                                  |
-  | [ActivityChecker]  (HTTP GET + redirect)|
+  | [ActivityChecker]                       |
+  |   httpx GET → CDN bypass? → Playwright  |
+  |   (Cloudflare / Akamai / Azure WAF)     |
   |      |                                  |
   | [PortalDetector]  (passive → API probe) |
   |      |                                  |
   |  if portal: [PortalAdapter] (API-first) |
   |  else:      [Crawler]  depth=2          |
-  |               (httpx + Playwright)      |
+  |    prefetched_seed avoids re-fetch      |
+  |    child hops via httpx + Playwright    |
   | [Scorer]   (keyword + state vocab)      |
   |      |                                  |
   | [DatasetDetector]                       |
