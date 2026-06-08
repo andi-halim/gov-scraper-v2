@@ -41,12 +41,6 @@ class TestMichiganGov:
     def test_page_is_active(self):
         assert self.resp.status_code == 200
 
-    def test_state_tagger_returns_MI(self):
-        from crawler.state_tagger import StateTagger
-        tagger = StateTagger()
-        state = tagger.tag(self.URL, self.resp.text)
-        assert state == "MI"
-
     def test_page_has_substantial_content(self):
         from crawler.http_client import _visible_text
         visible = _visible_text(self.resp.text)
@@ -68,12 +62,6 @@ class TestCensusGovFederal:
 
     def test_page_is_active(self):
         assert self.resp.status_code == 200
-
-    def test_state_tagger_returns_FEDERAL(self):
-        from crawler.state_tagger import StateTagger
-        tagger = StateTagger()
-        state = tagger.tag(self.URL, self.resp.text)
-        assert state == "FEDERAL"
 
     def test_not_detected_as_portal(self):
         from crawler.portal_detector import PortalDetector
@@ -169,9 +157,3 @@ class TestDCOpenDataArcGISHub:
         platform, method = det.detect(self.resp.text, dict(self.resp.headers), final_url)
         assert platform == "ArcGIS Hub"
 
-    def test_state_tagger_resolves_to_DC(self):
-        from crawler.state_tagger import StateTagger
-        tagger = StateTagger()
-        final_url = str(self.resp.url)
-        state = tagger.tag(final_url, self.resp.text)
-        assert state in ("DC", "NATIONAL")  # DC or fallback if domain pattern doesn't match

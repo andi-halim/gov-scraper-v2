@@ -29,8 +29,8 @@ def _normalize_url_for_dedup(url: str) -> str:
 def load_urls(csv_path: str) -> list[dict]:
     """T-80/T-81: Read a urls.csv and return a priority-sorted list of URL dicts.
 
-    Each dict has keys: 'url' (str), 'priority' (bool).
-    Reads only WEB_ADDRESS and PRIORITY_RESOURCE columns; all others are ignored.
+    Each dict has keys: 'url' (str), 'priority' (bool), 'state' (str).
+    Reads WEB_ADDRESS, PRIORITY_RESOURCE, and STATE columns; all others are ignored.
     Skips blank and malformed entries. Deduplicates by normalized URL.
     Priority URLs (PRIORITY_RESOURCE == 'YES', case-insensitive) sort first;
     relative order within each group is preserved.
@@ -43,6 +43,7 @@ def load_urls(csv_path: str) -> list[dict]:
         for lineno, row in enumerate(reader, start=2):
             raw_url = (row.get("WEB_ADDRESS") or "").strip()
             priority_raw = (row.get("PRIORITY_RESOURCE") or "").strip()
+            state = (row.get("STATE") or "NATIONAL").strip().upper()
 
             if not raw_url:
                 logger.warning("Row %d: skipping blank WEB_ADDRESS", lineno)
@@ -59,7 +60,7 @@ def load_urls(csv_path: str) -> list[dict]:
                 continue
             seen.add(normalized)
 
-            rows.append({"url": raw_url, "priority": priority_raw.upper() == "YES"})
+            rows.append({"url": raw_url, "priority": priority_raw.upper() == "YES", "state": state})
 
     rows.sort(key=lambda r: 0 if r["priority"] else 1)
     return rows

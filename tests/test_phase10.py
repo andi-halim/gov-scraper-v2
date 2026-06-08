@@ -42,12 +42,6 @@ def _make_portal_detector(platform=None, method="none"):
     return det
 
 
-def _make_state_tagger(state="NATIONAL"):
-    tagger = MagicMock()
-    tagger.tag.return_value = state
-    return tagger
-
-
 def _read_csv(path: Path) -> list[dict]:
     with path.open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
@@ -211,7 +205,7 @@ class TestPerUrlErrorHandling:
             with patch("run.HttpClient") as MockClient, \
                  patch("run.RobotsChecker"), \
                  patch("run.PortalDetector"), \
-                 patch("run.StateTagger"):
+                 patch("run.PortalDetector"):
                 MockClient.return_value.__enter__ = lambda s: MockClient.return_value
                 MockClient.return_value.__exit__ = MagicMock(return_value=False)
                 main(["--input", str(urls_csv), "--output", str(output_dir)])
@@ -246,11 +240,10 @@ class TestProcessUrlRobots:
         client = _make_http_client()
         robots = _make_robots(allowed, status)
         portal = _make_portal_detector()
-        tagger = _make_state_tagger()
         return _process_url(
-            url=url, priority=False,
+            url=url, priority=False, state="NATIONAL",
             http_client=client, robots_checker=robots,
-            portal_detector=portal, state_tagger=tagger, depth=2,
+            portal_detector=portal, depth=2,
         )
 
     def test_allowed_recorded_true(self):
@@ -266,10 +259,9 @@ class TestProcessUrlRobots:
         client = _make_http_client()
         robots = _make_robots(False, "disallowed")
         _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=robots,
-            portal_detector=_make_portal_detector(),
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=_make_portal_detector(), depth=2,
         )
         client.fetch_page.assert_not_called()
 
@@ -287,10 +279,9 @@ class TestProcessUrlNetworkError:
         client = MagicMock()
         client.fetch_page.side_effect = OSError("connection refused")
         result = _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=_make_robots(),
-            portal_detector=_make_portal_detector(),
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=_make_portal_detector(), depth=2,
         )
         assert result["active"] is False
 
@@ -298,10 +289,9 @@ class TestProcessUrlNetworkError:
         client = MagicMock()
         client.fetch_page.side_effect = OSError("DNS lookup failed")
         result = _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=_make_robots(),
-            portal_detector=_make_portal_detector(),
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=_make_portal_detector(), depth=2,
         )
         assert "DNS lookup failed" in result["error_notes"]
 
@@ -309,10 +299,9 @@ class TestProcessUrlNetworkError:
         client = MagicMock()
         client.fetch_page.side_effect = ConnectionError("timeout")
         result = _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=_make_robots(),
-            portal_detector=_make_portal_detector(),
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=_make_portal_detector(), depth=2,
         )
         assert result["http_status"] == 0
 
@@ -326,10 +315,9 @@ class TestProcessUrlInactive:
         client = _make_http_client(html="<html><body>Error</body></html>",
                                     http_status=status)
         return _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=_make_robots(),
-            portal_detector=_make_portal_detector(),
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=_make_portal_detector(), depth=2,
         )
 
     def test_404_sets_active_false(self):
@@ -345,10 +333,9 @@ class TestProcessUrlInactive:
         client = _make_http_client(http_status=404)
         portal = _make_portal_detector()
         _process_url(
-            url="https://example.gov/", priority=False,
+            url="https://example.gov/", priority=False, state="NATIONAL",
             http_client=client, robots_checker=_make_robots(),
-            portal_detector=portal,
-            state_tagger=_make_state_tagger(), depth=2,
+            portal_detector=portal, depth=2,
         )
         portal.detect.assert_not_called()
 
@@ -365,7 +352,6 @@ class TestPortalRouting:
     def _call_with_portal(self, platform, adapter_result=None):
         client = _make_http_client()
         portal = _make_portal_detector(platform=platform, method="passive")
-        tagger = _make_state_tagger(state="NATIONAL")
         adapter_result = adapter_result or _portal_adapter_result()
 
         adapter_instance = MagicMock()
@@ -378,9 +364,9 @@ class TestPortalRouting:
              patch("run.score_page") as mock_score, \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
             result = _process_url(
-                url="https://data.example.gov/", priority=False,
+                url="https://data.example.gov/", priority=False, state="NATIONAL",
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, state_tagger=tagger, depth=2,
+                portal_detector=portal, depth=2,
             )
         return result, mock_crawl, mock_detect, mock_score
 
@@ -438,23 +424,21 @@ class TestPortalRouting:
     def test_no_portal_triggers_depth_crawl(self):
         client = _make_http_client()
         portal = _make_portal_detector(platform=None)
-        tagger = _make_state_tagger(state="NATIONAL")
 
         with patch("run.crawl_url", return_value=([], 0)) as mock_crawl, \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
             _process_url(
-                url="https://example.gov/", priority=False,
+                url="https://example.gov/", priority=False, state="NATIONAL",
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, state_tagger=tagger, depth=2,
+                portal_detector=portal, depth=2,
             )
         mock_crawl.assert_called_once()
 
     def test_arcgis_hub_portal_routing(self):
         client = _make_http_client()
         portal = _make_portal_detector(platform="ArcGIS Hub", method="passive")
-        tagger = _make_state_tagger(state="DC")
         adapter_instance = MagicMock()
         adapter_instance.run.return_value = _portal_adapter_result()
         adapter_cls_mock = MagicMock(return_value=adapter_instance)
@@ -463,9 +447,9 @@ class TestPortalRouting:
              patch("run.crawl_url") as mock_crawl, \
              patch("run.get_effective_keywords", return_value=frozenset()):
             result = _process_url(
-                url="https://opendata.dc.gov/", priority=False,
+                url="https://opendata.dc.gov/", priority=False, state="DC",
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, state_tagger=tagger, depth=2,
+                portal_detector=portal, depth=2,
             )
         assert result["portal_platform"] == "ArcGIS Hub"
         mock_crawl.assert_not_called()
@@ -482,7 +466,6 @@ class TestProcessUrlStandardPipeline:
                score=None):
         client = _make_http_client()
         portal = _make_portal_detector(platform=None)
-        tagger = _make_state_tagger(state=state)
         score = score or _score_result()
         crawl_pages = crawl_pages or []
 
@@ -491,9 +474,9 @@ class TestProcessUrlStandardPipeline:
              patch("run.score_page", return_value=score), \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
             return _process_url(
-                url=url, priority=False,
+                url=url, priority=False, state=state,
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, state_tagger=tagger, depth=2,
+                portal_detector=portal, depth=2,
             )
 
     def test_active_true_on_200(self):
@@ -539,15 +522,14 @@ class TestProcessUrlStandardPipeline:
     def test_js_rendered_flag_propagated(self):
         client = _make_http_client(js_rendered=True)
         portal = _make_portal_detector()
-        tagger = _make_state_tagger()
         with patch("run.crawl_url", return_value=([], 0)), \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
             result = _process_url(
-                url="https://example.gov/", priority=False,
+                url="https://example.gov/", priority=False, state="NATIONAL",
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, state_tagger=tagger, depth=2,
+                portal_detector=portal, depth=2,
             )
         assert result["js_rendered"] is True
 
@@ -558,10 +540,9 @@ class TestProcessUrlStandardPipeline:
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
             result = _process_url(
-                url="https://example.gov/", priority=True,
+                url="https://example.gov/", priority=True, state="NATIONAL",
                 http_client=client, robots_checker=_make_robots(),
-                portal_detector=_make_portal_detector(),
-                state_tagger=_make_state_tagger(), depth=2,
+                portal_detector=_make_portal_detector(), depth=2,
             )
         assert result["priority"] is True
 
@@ -578,7 +559,7 @@ class TestMainSkipLogic:
         (config_dir / "state_definitions.json").write_text("{}")
         (config_dir / "keywords.csv").write_text("county\n")
         urls_csv = config_dir / "urls.csv"
-        lines = ["WEB_ADDRESS,PRIORITY_RESOURCE"] + [f"{u},NO" for u in urls]
+        lines = ["WEB_ADDRESS,PRIORITY_RESOURCE,STATE"] + [f"{u},NO,NATIONAL" for u in urls]
         urls_csv.write_text("\n".join(lines) + "\n")
         return urls_csv
 
@@ -610,8 +591,7 @@ class TestMainSkipLogic:
         with patch("run._process_url", side_effect=fake_process), \
              patch("run.HttpClient") as MockClient, \
              patch("run.RobotsChecker"), \
-             patch("run.PortalDetector"), \
-             patch("run.StateTagger"):
+             patch("run.PortalDetector"):
             MockClient.return_value.__enter__ = lambda s: MockClient.return_value
             MockClient.return_value.__exit__ = MagicMock(return_value=False)
             main(["--input", str(urls_csv), "--output", str(output_dir), "--resume"])
@@ -647,8 +627,7 @@ class TestMainSkipLogic:
         with patch("run._process_url", side_effect=fake_process), \
              patch("run.HttpClient") as MockClient, \
              patch("run.RobotsChecker"), \
-             patch("run.PortalDetector"), \
-             patch("run.StateTagger"):
+             patch("run.PortalDetector"):
             MockClient.return_value.__enter__ = lambda s: MockClient.return_value
             MockClient.return_value.__exit__ = MagicMock(return_value=False)
             main(["--input", str(urls_csv), "--output", str(output_dir), "--new-only"])
@@ -670,7 +649,7 @@ class TestMainOutputCSV:
         (config_dir / "keywords.csv").write_text("county\n")
         urls_csv = config_dir / "urls.csv"
         urls = [f"https://example{i}.gov/" for i in range(url_count)]
-        lines = ["WEB_ADDRESS,PRIORITY_RESOURCE"] + [f"{u},NO" for u in urls]
+        lines = ["WEB_ADDRESS,PRIORITY_RESOURCE,STATE"] + [f"{u},NO,NATIONAL" for u in urls]
         urls_csv.write_text("\n".join(lines) + "\n")
         output_dir = tmp_path / "output" / "2026-01-01"
 
@@ -688,8 +667,7 @@ class TestMainOutputCSV:
         with patch("run._process_url", side_effect=fake_process), \
              patch("run.HttpClient") as MockClient, \
              patch("run.RobotsChecker"), \
-             patch("run.PortalDetector"), \
-             patch("run.StateTagger"):
+             patch("run.PortalDetector"):
             MockClient.return_value.__enter__ = lambda s: MockClient.return_value
             MockClient.return_value.__exit__ = MagicMock(return_value=False)
             rc = main(["--input", str(urls_csv), "--output", str(output_dir)])

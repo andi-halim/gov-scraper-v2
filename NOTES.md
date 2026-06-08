@@ -86,7 +86,7 @@
 ### Phase 3 implementation notes
 
 **`crawler/state_tagger.py` — `StateTagger`**
-- `tag(url, html="") -> str` resolves the six-priority chain from PRD §8; returns a two-letter state code, `"FEDERAL"`, or `"NATIONAL"`.
+- `tag(url, html="") -> str` resolves the six-priority chain from PRD §8; returns a two-letter state code or `"NATIONAL"`.
 - **Priority 1** (`*.state.XX.us`): regex on hostname — `\.state\.([a-z]{2})\.us$`.
 - **Priority 2** (`XX.gov` subdomain): checks `tldextract` `domain` field is exactly two letters and matches a state abbreviation. Known federal two-letter domains (e.g. `va.gov`) are explicitly excluded before this check fires.
 - **Priority 3** (state name in domain): iterates all state names longest-first, compresses spaces (`"new mexico"` → `"newmexico"`), and checks for substring presence in the registered domain. This catches embedded names like `oregoncounties.org` → `OR` and `portsoflouisiana.org` → `LA`. Abbreviation-only domains (e.g. `alconservationdistricts.gov`) are not matched here and fall through to Priority 4.

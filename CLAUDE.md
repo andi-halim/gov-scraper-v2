@@ -12,7 +12,7 @@ See [PRD.md](PRD.md) for full requirements. See [TASKS.md](TASKS.md) for full br
 
 | File | Purpose |
 |---|---|
-| `config/urls.csv` | Seed URLs — a living document; new rows are appended over time. Only `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns are used by the pipeline. `RESOURCE_NAME` is a human label — **never use it for inference**. |
+| `config/urls.csv` | Seed URLs — a living document; new rows are appended over time. `WEB_ADDRESS`, `PRIORITY_RESOURCE`, and `STATE` columns are used by the pipeline. `RESOURCE_NAME` is a human label — **never use it for inference**. When adding new rows, populate `STATE` with a two-letter USPS abbreviation, `FEDERAL`, or `NATIONAL`. |
 | `config/keywords.csv` | Base vocabulary for relevance scoring. Used for all URLs. |
 | `config/state_definitions.json` | Per-state Census vocabulary generated from the ISD PDF. Used to extend `keywords.csv` for state-tagged URLs. **Do not hand-edit.** |
 | `config/state_abbrev.json` | Ordered list of all 51 state/DC abbreviations. Used by the setup script to track completion progress. |
@@ -42,15 +42,13 @@ python setup/generate_state_definitions.py --llm ollama   # requires Ollama runn
 | `--pdf PATH` | `config/2022ISD.pdf` | Path to the ISD PDF |
 | `--output PATH` | `config/state_definitions.json` | Output path |
 | `--force` | off | Skip the confirmation prompt |
-| `--gemini-model NAME` | `gemini-2.5-flash` | Gemini model to use (Gemini backend only) |
+| `--gemini-model NAME` | `gemini-3.5-flash` | Gemini model to use (Gemini backend only) |
 | `--states XX,YY` | *(auto-detect)* | Comma-separated abbreviations to process manually. Results are **merged** into existing output — unlisted states are preserved. |
 | `--max-requests N` | `20` | Max Gemini API calls per run when `--states` is omitted (each retry counts). Matches the free-tier RPD cap. |
 | `--ollama-url URL` | `http://localhost:11434` | Ollama API base URL |
 | `--ollama-model NAME` | `llama3.2` | Ollama model to use |
 
 **PDF library:** the script uses `pdfplumber` (not `pypdf`) for page-by-page text extraction.
-
-**Rate limits and multi-day batching:** the Gemini free tier is ~15 RPM but only **20 requests per day (RPD)** for Gemini 2.5 Flash. A full run requires 51 requests (one per state + DC), so it cannot finish in a single day on the free tier.
 
 **When `--states` is omitted**, the script automatically determines which states still need processing by comparing `config/state_abbrev.json` against the current `config/state_definitions.json`. It considers a state "remaining" if it is absent, has empty `census_terms`, or has an error/parse-error note. It then prompts for confirmation and stops after `--max-requests` API calls (default 20). Just run the same command each day until complete:
 
@@ -87,7 +85,7 @@ python -m pytest tests/                          # unit tests only (fast, no net
 RUN_INTEGRATION_TESTS=1 python -m pytest tests/test_integration_urls.py -v
 ```
 
-Integration tests hit five live URLs (michigan.gov, census.gov, data.cityofchicago.org, catalog.data.gov, opendata.dc.gov) and are skipped by default.
+Integration tests hit four live URLs (census.gov, data.cityofchicago.org, catalog.data.gov, opendata.dc.gov) and are skipped by default.
 
 ---
 
@@ -110,7 +108,7 @@ Each state section describes which types exist in that state, what they are loca
 - **`RESOURCE_NAME` is never used for inference.** It is a manually maintained human label. Any logic that reads it would require ongoing maintenance and is explicitly out of scope.
 - **URL/domain text does not contribute to the relevance score.** Score is derived from page title, headings, body text, and link anchor text only.
 - **Government unit type classification is not in scope.** The tool answers "is this site Census-relevant?" not "what type of unit is this site?"
-- **State is auto-tagged from URL patterns first** (`*.state.XX.us`, `*.XX.gov` subdomain, full state name in domain), falling back to page `<title>`/H1 content. Unresolvable URLs are tagged `NATIONAL`; known federal agency domains are tagged `FEDERAL`.
+- **State is manually assigned via the `STATE` column in `config/urls.csv`.** Valid values are two-letter USPS abbreviations, `FEDERAL`, or `NATIONAL`. The pipeline reads this column at ingestion time; rows with a missing `STATE` cell default to `NATIONAL`. There is no automatic state detection — the analyst fills in the column when adding new URLs.
 - **Scorer is pluggable.** v1 uses keyword matching only. Future modes add sentence transformers (Mode 2), local Ollama LLM (Mode 3), or Gemini free tier (Mode 4) without changing the pipeline.
 - **Output is written incrementally** (one CSV row appended per completed URL) so runs are crash-safe and resumable via `--resume`. Use `--new-only` for delta runs when new URLs are added to `urls.csv`.
 - **robots.txt is fail-open.** If `robots.txt` is unreachable, a warning is logged and the crawl proceeds.

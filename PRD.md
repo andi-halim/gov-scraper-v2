@@ -52,7 +52,8 @@ To address this, `gov-scraper-v2` generates a per-state vocabulary file (`config
 ### FR-1: Input Ingestion
 
 - Read `config/urls.csv` at startup. The file is a living document; new rows are added over time as additional sources are identified. The pipeline must handle any list size without modification.
-- Use only the `WEB_ADDRESS` and `PRIORITY_RESOURCE` columns. Ignore all other columns including `RESOURCE_NAME`.
+- Use the `WEB_ADDRESS`, `PRIORITY_RESOURCE`, and `STATE` columns. Ignore all other columns including `RESOURCE_NAME`.
+- `STATE` must be a two-letter USPS abbreviation, `FEDERAL`, or `NATIONAL`. Rows with a missing or blank `STATE` value default to `NATIONAL`.
 - Deduplicate by `WEB_ADDRESS` at ingestion time (case-insensitive, normalised URL). Log any duplicate entries found and process each unique URL only once per run.
 - Skip rows where `WEB_ADDRESS` is empty or blank; log each skipped row.
 - Validate that each non-empty `WEB_ADDRESS` is a parseable URL; log and skip malformed entries.
@@ -80,16 +81,13 @@ To address this, `gov-scraper-v2` generates a per-state vocabulary file (`config
 
 ### FR-5: State Tagging
 
-Assign a US state (two-letter USPS abbreviation) or a special tag to each URL before scoring, using the following priority order:
+Each URL's state tag is read directly from the `STATE` column in `config/urls.csv`. The analyst populates this column when adding new URLs. Valid values:
 
-1. **URL pattern — `*.state.XX.us`**: extract `XX` directly.
-2. **URL pattern — `*.XX.gov` subdomain**: extract two-letter prefix before `.gov` (e.g., `sco.ca.gov` → `CA`).
-3. **URL pattern — full state name in registered domain**: match against canonical state name list (e.g., `michigan.gov` → `MI`).
-4. **Page content fallback**: fetch page, scan `<title>` and first `<h1>` for a US state name or abbreviation.
-5. **FEDERAL**: domain matches a known federal agency list (e.g., `hud.gov`, `epa.gov`, `census.gov`, `usda.gov`, `faa.gov`).
-6. **NATIONAL**: none of the above resolved a state.
+- **Two-letter USPS abbreviation** (e.g., `MI`, `CA`, `TX`) — URL is scored using `config/keywords.csv` plus the state-specific terms from `config/state_definitions.json`.
+- **`FEDERAL`** — URL belongs to a federal agency; scored against `config/keywords.csv` only.
+- **`NATIONAL`** — URL is not state-specific (national associations, multi-state resources, unresolvable); scored against `config/keywords.csv` only.
 
-`FEDERAL` and `NATIONAL` URLs are scored against `config/keywords.csv` only (no state expansion).
+A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is available from ingestion time, before any HTTP request is made, so all output rows carry a state value regardless of whether the URL is active.
 
 ### FR-6: JavaScript Detection and Rendering
 
@@ -224,20 +222,17 @@ relevance_score = min(100, round(weighted_hits / normalization_factor * 100))
 
 ---
 
-## 8. State Tagging Logic
+## 8. State Tagging
 
-Resolution is attempted in order; the first match wins.
+State tags are maintained manually in the `STATE` column of `config/urls.csv`. The analyst assigns the correct value when adding a new URL. The pipeline reads the column at ingestion and carries the value through to the output row unchanged.
 
-| Priority | Pattern | Example |
+| Value | Meaning | Scoring behaviour |
 |---|---|---|
-| 1 | `*.state.XX.us` TLD | `treasurer.state.tx.us` → `TX` |
-| 2 | Two-letter subdomain before `.gov` | `sco.ca.gov` → `CA`, `auditor.mo.gov` → `MO` |
-| 3 | Full state name in registered domain | `michigan.gov` → `MI`, `illinois.gov` → `IL` |
-| 4 | State name/abbrev in page `<title>` or `<h1>` | page title "Iowa Department of Management" → `IA` |
-| 5 | Domain in known federal list | `hud.gov` → `FEDERAL` |
-| 6 | Unresolved | → `NATIONAL` |
+| Two-letter abbreviation (e.g. `MI`) | State-specific URL | `keywords.csv` + `state_definitions.json[state].census_terms` |
+| `FEDERAL` | Federal agency URL | `keywords.csv` only |
+| `NATIONAL` | Non-state-specific or unknown | `keywords.csv` only |
 
-Known federal domains include at minimum: `hud.gov`, `epa.gov`, `census.gov`, `usda.gov`, `faa.gov`, `usa.gov`, `data.gov`.
+When the `STATE` column is absent or blank, the row defaults to `NATIONAL`.
 
 ---
 
@@ -299,21 +294,20 @@ Given the same input CSV and the same live state of each website, two runs must 
 ### Pipeline (per crawl run)
 
 ```
-config/urls.csv
+config/urls.csv  (STATE column pre-populated by analyst)
        |
-  [Orchestrator / load_urls]
+  [Orchestrator / load_urls]  <-- reads url, priority, state per row
        |
   [Priority Queue]  <-- PRIORITY_RESOURCE=YES sorted first
        |
   per URL:
   +-----------------------------------------+
+  | state = entry["state"]                  |
+  | effective_keywords = get_keywords(state)|
+  |      |                                  |
   | [RobotsChecker]                         |
   |      |                                  |
   | [ActivityChecker]  (HTTP GET + redirect)|
-  |      |                                  |
-  | [StateTagger]  <-- URL patterns first,  |
-  |   then page content fallback (P4)       |
-  |   → effective_keywords for scorer       |
   |      |                                  |
   | [PortalDetector]  (passive → API probe) |
   |      |                                  |
@@ -329,8 +323,6 @@ config/urls.csv
        |
   output/<run-date>/results.csv
 ```
-
-> Note: StateTagger runs per-URL inside the loop (after the page fetch) so that Priority 4 — page content fallback — has rendered HTML available. It cannot run as a batch pre-processing step because most URLs require a live page fetch to resolve state.
 
 ### One-time setup
 
@@ -357,7 +349,6 @@ gov-scraper-v2/
     robots.py
     http_client.py                # httpx wrapper with rate limiting
     playwright_client.py
-    state_tagger.py
     dataset_detector.py
     portal_detector.py
   portals/
@@ -373,8 +364,8 @@ gov-scraper-v2/
   setup/
     generate_state_definitions.py
   tests/
-    test_phase2.py … test_phase10.py
-    test_integration_urls.py      # skipped by default; set RUN_INTEGRATION_TESTS=1
+    test_phase2.py … test_phase10.py  # test_phase3.py removed (StateTagger deleted)
+    test_integration_urls.py          # skipped by default; set RUN_INTEGRATION_TESTS=1
   output/                         # gitignored
   page_result.py                  # PageResult NamedTuple shared across packages
   utils.py                        # normalize_text() shared between scorer and portals
@@ -464,6 +455,7 @@ This is a living document. New rows are appended as additional government source
 | `RESOURCE_NAME` | No | Human label; ignored by all pipeline components |
 | `WEB_ADDRESS` | Yes | Seed URL to crawl |
 | `PRIORITY_RESOURCE` | Yes | `YES` to sort URL to front of queue; any other value treated as non-priority |
+| `STATE` | Yes | Manually assigned state tag: two-letter USPS abbreviation, `FEDERAL`, or `NATIONAL`. Missing or blank defaults to `NATIONAL`. Fill this column when adding new rows. |
 
 ### `config/keywords.csv`
 

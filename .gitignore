@@ -6,3 +6,4 @@ output/
 test-results/
 .claude/
 .DS_Store
+config/urls.csv

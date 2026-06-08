@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 import os
+import random
 import re
 import sys
 import time
@@ -220,10 +221,33 @@ def _get_gemini_client():
     return _gemini_client
 
 
+def _is_quota_exhausted(exc) -> bool:
+    """Return True when a 429 should not be retried.
+
+    Two unretryable cases:
+    - Zero-cap model: "limit: 0" means the model has no free-tier allocation on this
+      account at all — retrying will never succeed regardless of wait time.
+    - RPD exhaustion: daily quota depleted with no meaningful retry delay.
+
+    RPM 429s are retryable; they carry a retry delay with a non-zero seconds value.
+    A retryDelay of '0s' is not a real retry signal.
+    """
+    raw = str(exc)
+    msg = raw.lower()
+    if "limit: 0" in raw:
+        return True
+    if "exceeded" in msg and "quota" in msg:
+        has_nonzero_delay = bool(
+            re.search(r"retry.?delay['\"]?\s*[:{]\s*['\"]?[1-9]", raw, re.IGNORECASE)
+        )
+        return not has_nonzero_delay
+    return False
+
+
 def call_gemini(
     state_name: str,
     section_text: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-3.5-flash",
     request_counter: Optional[list[int]] = None,
 ) -> tuple[dict, int]:
     """Call Gemini API and return ({"census_terms": [...], "notes": "..."}, attempts_used)."""
@@ -249,13 +273,21 @@ def call_gemini(
                     ),
                     # Disable thinking — this is a structured extraction task that
                     # does not need chain-of-thought. Thinking is on by default for
-                    # gemini-2.5-flash and adds significant compute overhead, causing
+                    # gemini-3.5-flash and adds significant compute overhead, causing
                     # 503 "high demand" errors on the free tier.
                     thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return _parse_llm_response((response.text or "").strip(), state_name), attempt
         except genai_errors.APIError as exc:
+            if exc.code == 429 and _is_quota_exhausted(exc):
+                log.error(
+                    "Daily quota exhausted (model=%s). "
+                    "Check usage at https://aistudio.google.com or wait until quota resets. "
+                    "To avoid burning retries on an unrecoverable error, the script is stopping now.",
+                    model,
+                )
+                raise
             retryable = exc.code in (429, 503)
             if not retryable or attempt == _GEMINI_MAX_RETRIES:
                 raise
@@ -342,7 +374,7 @@ def process_states(
     llm: str,
     ollama_url: str,
     ollama_model: str,
-    gemini_model: str = "gemini-2.5-flash",
+    gemini_model: str = "gemini-3.5-flash",
     max_requests: int = 0,
     request_counter: Optional[list[int]] = None,
     output_path: Optional[Path] = None,
@@ -391,7 +423,7 @@ def process_states(
         finally:
             if llm == "gemini":
                 # Gemini free tier: ~15 RPM → sleep 10s between every request (success or failure)
-                time.sleep(10)
+                time.sleep(12 + random.uniform(0, 6))
 
     return results
 
@@ -429,8 +461,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--gemini-model",
-        default="gemini-2.5-flash",
-        help="Gemini model name (default: gemini-2.5-flash).",
+        default="gemini-3.5-flash",
+        help="Gemini model name (default: gemini-3.5-flash).",
     )
     parser.add_argument(
         "--states",

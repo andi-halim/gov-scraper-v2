@@ -11,7 +11,6 @@ from crawler.http_client import HttpClient
 from crawler.orchestrator import crawl_url, load_urls
 from crawler.portal_detector import PortalDetector
 from crawler.robots import RobotsChecker
-from crawler.state_tagger import StateTagger
 from portals.arcgis_hub import ArcGISHubAdapter
 from portals.ckan import CKANAdapter
 from portals.socrata import SocrataAdapter
@@ -114,7 +113,6 @@ def main(argv=None) -> int:
     with HttpClient(delay=args.delay) as http_client:
         robots_checker = RobotsChecker(http_client)
         portal_detector = PortalDetector(http_client)
-        state_tagger = StateTagger()
 
         with ReportWriter(output_dir) as writer:
             seen_in_run: set[str] = writer.open(resume=args.resume)
@@ -122,6 +120,7 @@ def main(argv=None) -> int:
             for entry in url_entries:
                 url: str = entry["url"]
                 priority: bool = entry["priority"]
+                state: str = entry["state"]
 
                 if url in seen_in_run or url in skip_urls:
                     logger.info("Skipping %s (already processed)", url)
@@ -135,10 +134,10 @@ def main(argv=None) -> int:
                     result = _process_url(
                         url=url,
                         priority=priority,
+                        state=state,
                         http_client=http_client,
                         robots_checker=robots_checker,
                         portal_detector=portal_detector,
-                        state_tagger=state_tagger,
                         depth=args.depth,
                     )
                 except Exception as exc:
@@ -160,10 +159,10 @@ def main(argv=None) -> int:
 def _process_url(
     url: str,
     priority: bool,
+    state: str,
     http_client: HttpClient,
     robots_checker: RobotsChecker,
     portal_detector: PortalDetector,
-    state_tagger: StateTagger,
     depth: int,
 ) -> dict:
     """Execute the full per-URL pipeline.
@@ -174,7 +173,7 @@ def _process_url(
     result: dict = {
         "url": url,
         "priority": priority,
-        "state": "",
+        "state": state,
         "active": False,
         "http_status": 0,
         "final_url": url,
@@ -221,9 +220,7 @@ def _process_url(
     if not result["active"]:
         return result
 
-    # Step 4: state tagging (needed before portal adapter for effective_keywords)
-    state = state_tagger.tag(url, html)
-    result["state"] = state
+    # Step 4: resolve effective keywords from the manually-tagged state
     effective_keywords = get_effective_keywords(state)
 
     # Step 5 (T-49): portal detection and routing

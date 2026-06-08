@@ -45,7 +45,7 @@ def get_effective_keywords(state: str) -> frozenset[str]:
     All other states get base keywords unioned with state-specific census_terms.
     """
     base = _base_keywords()
-    if state in ("FEDERAL", "NATIONAL"):
+    if state == "NATIONAL":
         return base
     terms = frozenset(
         t.strip()

@@ -41,7 +41,7 @@ class TestLoadUrlsBasic:
         ])
         result = load_urls(str(f))
         assert "RESOURCE_NAME" not in result[0]
-        assert set(result[0].keys()) == {"url", "priority"}
+        assert set(result[0].keys()) == {"url", "priority", "state"}
 
     def test_returns_empty_for_header_only_csv(self, tmp_path):
         f = tmp_path / "urls.csv"

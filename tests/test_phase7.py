@@ -36,14 +36,6 @@ class TestGetEffectiveKeywords:
             patch.object(kl_module, "_state_defs", return_value=state_defs),
         )
 
-    def test_federal_returns_base_only(self):
-        base = frozenset(["county", "municipal"])
-        defs = {"FEDERAL": {"census_terms": ["parish"]}}
-        with patch.object(kl_module, "_base_keywords", return_value=base), \
-             patch.object(kl_module, "_state_defs", return_value=defs):
-            result = get_effective_keywords("FEDERAL")
-        assert result == base
-
     def test_national_returns_base_only(self):
         base = frozenset(["county", "municipal"])
         with patch.object(kl_module, "_base_keywords", return_value=base), \
