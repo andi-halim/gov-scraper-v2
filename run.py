@@ -59,6 +59,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--input", type=str, default=_DEFAULT_INPUT,
         help=f"Path to input URL CSV (default: {_DEFAULT_INPUT})",
     )
+    p.add_argument(
+        "--max-pages", type=int, default=75, dest="max_pages",
+        help="Maximum pages fetched per seed URL during BFS crawl (default: 75)",
+    )
     return p
 
 
@@ -139,6 +143,7 @@ def main(argv=None) -> int:
                         robots_checker=robots_checker,
                         portal_detector=portal_detector,
                         depth=args.depth,
+                        max_pages=args.max_pages,
                     )
                 except Exception as exc:
                     logger.error("Unhandled error for %s: %s", url, exc, exc_info=True)
@@ -164,6 +169,7 @@ def _process_url(
     robots_checker: RobotsChecker,
     portal_detector: PortalDetector,
     depth: int,
+    max_pages: int = 75,
 ) -> dict:
     """Execute the full per-URL pipeline.
 
@@ -245,6 +251,7 @@ def _process_url(
     pages, crawl_depth_reached = crawl_url(
         url, http_client, depth=depth,
         prefetched_seed=(html, final_url, http_status, js_rendered),
+        max_pages=max_pages,
     )
     result["crawl_depth_reached"] = crawl_depth_reached
 

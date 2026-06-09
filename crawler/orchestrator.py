@@ -89,11 +89,15 @@ def _extract_links(html: str, base_url: str) -> list[str]:
     return links
 
 
+_DEFAULT_MAX_PAGES = 75
+
+
 def crawl_url(
     seed_url: str,
     http_client: HttpClient,
     depth: int = 2,
     prefetched_seed: tuple | None = None,
+    max_pages: int = _DEFAULT_MAX_PAGES,
 ) -> tuple[list[PageResult], int]:
     """T-50/T-51/T-52: BFS depth crawler.
 
@@ -108,6 +112,9 @@ def crawl_url(
     the seed URL is not re-fetched — its result is used directly and child links
     are enqueued at hop 1. This avoids a duplicate network request when the
     caller already fetched the seed for an activity check.
+
+    max_pages caps the total number of pages fetched (including the seed) to
+    prevent unbounded memory growth on sites with thousands of internal links.
     """
     pages: list[PageResult] = []
     visited: set[str] = set()
@@ -133,6 +140,12 @@ def crawl_url(
         queue.append((seed_url, 0))
 
     while queue:
+        if len(pages) >= max_pages:
+            logger.warning(
+                "Page cap (%d) reached for %s — stopping crawl early", max_pages, seed_url
+            )
+            break
+
         url, hop = queue.popleft()
 
         try:
