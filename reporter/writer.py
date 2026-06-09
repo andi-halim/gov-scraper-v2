@@ -9,8 +9,7 @@ COLUMNS = [
     "url", "priority", "state", "active", "http_status", "final_url",
     "robots_allowed", "robots_status", "js_rendered", "relevance_score",
     "matched_keywords", "datasets_found", "dataset_urls", "dataset_formats",
-    "crawl_depth_reached", "portal_platform", "portal_dataset_count",
-    "portal_relevant_count", "top_dataset_urls", "error_notes",
+    "crawl_depth_reached", "portal_platform", "error_notes",
 ]
 
 
@@ -160,9 +159,6 @@ class ReportWriter:
             "dataset_formats": [],
             "crawl_depth_reached": 0,
             "portal_platform": "",
-            "portal_dataset_count": 0,
-            "portal_relevant_count": 0,
-            "top_dataset_urls": [],
             "error_notes": error,
         }
 

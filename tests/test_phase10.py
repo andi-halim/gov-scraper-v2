@@ -47,18 +47,6 @@ def _read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(fh))
 
 
-def _portal_adapter_result(**overrides) -> dict:
-    base = {
-        "portal_dataset_count": 5,
-        "portal_relevant_count": 3,
-        "top_dataset_urls": ["https://data.example.gov/d/1"],
-        "matched_keywords": ["county", "district"],
-        "relevance_score": 42,
-    }
-    base.update(overrides)
-    return base
-
-
 def _score_result(**overrides) -> dict:
     base = {"relevance_score": 10, "matched_keywords": ["county"]}
     base.update(overrides)
@@ -197,8 +185,7 @@ class TestPerUrlErrorHandling:
                     "matched_keywords": [], "datasets_found": False,
                     "dataset_urls": [], "dataset_formats": [],
                     "crawl_depth_reached": 0, "portal_platform": "",
-                    "portal_dataset_count": 0, "portal_relevant_count": 0,
-                    "top_dataset_urls": [], "error_notes": "",
+                    "error_notes": "",
                 }
             mock_proc.side_effect = side_effect
 
@@ -349,17 +336,11 @@ class TestProcessUrlInactive:
 # ---------------------------------------------------------------------------
 
 class TestPortalRouting:
-    def _call_with_portal(self, platform, adapter_result=None):
+    def _call_with_portal(self, platform):
         client = _make_http_client()
         portal = _make_portal_detector(platform=platform, method="passive")
-        adapter_result = adapter_result or _portal_adapter_result()
 
-        adapter_instance = MagicMock()
-        adapter_instance.run.return_value = adapter_result
-        adapter_cls_mock = MagicMock(return_value=adapter_instance)
-
-        with patch.dict("run._PORTAL_ADAPTERS", {platform: adapter_cls_mock}), \
-             patch("run.crawl_url") as mock_crawl, \
+        with patch("run.crawl_url") as mock_crawl, \
              patch("run.detect_datasets") as mock_detect, \
              patch("run.score_page") as mock_score, \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
@@ -378,6 +359,14 @@ class TestPortalRouting:
         result, _, _, _ = self._call_with_portal("CKAN")
         assert result["portal_platform"] == "CKAN"
 
+    def test_arcgis_hub_platform_recorded(self):
+        result, _, _, _ = self._call_with_portal("ArcGIS Hub")
+        assert result["portal_platform"] == "ArcGIS Hub"
+
+    def test_portal_relevance_score_is_null(self):
+        result, _, _, _ = self._call_with_portal("Socrata")
+        assert result["relevance_score"] is None
+
     def test_portal_skips_depth_crawl(self):
         _, mock_crawl, _, _ = self._call_with_portal("Socrata")
         mock_crawl.assert_not_called()
@@ -389,37 +378,6 @@ class TestPortalRouting:
     def test_portal_skips_scorer(self):
         _, _, _, mock_score = self._call_with_portal("Socrata")
         mock_score.assert_not_called()
-
-    def test_portal_dataset_count_recorded(self):
-        result, _, _, _ = self._call_with_portal(
-            "Socrata", _portal_adapter_result(portal_dataset_count=99)
-        )
-        assert result["portal_dataset_count"] == 99
-
-    def test_portal_relevant_count_recorded(self):
-        result, _, _, _ = self._call_with_portal(
-            "CKAN", _portal_adapter_result(portal_relevant_count=7)
-        )
-        assert result["portal_relevant_count"] == 7
-
-    def test_portal_relevance_score_recorded(self):
-        result, _, _, _ = self._call_with_portal(
-            "Socrata", _portal_adapter_result(relevance_score=55)
-        )
-        assert result["relevance_score"] == 55
-
-    def test_portal_top_dataset_urls_recorded(self):
-        urls = ["https://data.gov/d/1", "https://data.gov/d/2"]
-        result, _, _, _ = self._call_with_portal(
-            "Socrata", _portal_adapter_result(top_dataset_urls=urls)
-        )
-        assert result["top_dataset_urls"] == urls
-
-    def test_portal_matched_keywords_recorded(self):
-        result, _, _, _ = self._call_with_portal(
-            "Socrata", _portal_adapter_result(matched_keywords=["county", "district"])
-        )
-        assert "county" in result["matched_keywords"]
 
     def test_no_portal_triggers_depth_crawl(self):
         client = _make_http_client()
@@ -435,24 +393,6 @@ class TestPortalRouting:
                 portal_detector=portal, depth=2,
             )
         mock_crawl.assert_called_once()
-
-    def test_arcgis_hub_portal_routing(self):
-        client = _make_http_client()
-        portal = _make_portal_detector(platform="ArcGIS Hub", method="passive")
-        adapter_instance = MagicMock()
-        adapter_instance.run.return_value = _portal_adapter_result()
-        adapter_cls_mock = MagicMock(return_value=adapter_instance)
-
-        with patch.dict("run._PORTAL_ADAPTERS", {"ArcGIS Hub": adapter_cls_mock}), \
-             patch("run.crawl_url") as mock_crawl, \
-             patch("run.get_effective_keywords", return_value=frozenset()):
-            result = _process_url(
-                url="https://opendata.dc.gov/", priority=False, state="DC",
-                http_client=client, robots_checker=_make_robots(),
-                portal_detector=portal, depth=2,
-            )
-        assert result["portal_platform"] == "ArcGIS Hub"
-        mock_crawl.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -513,11 +453,6 @@ class TestProcessUrlStandardPipeline:
     def test_portal_platform_empty_for_non_portal(self):
         result = self._call()
         assert result["portal_platform"] == ""
-
-    def test_portal_counts_zero_for_non_portal(self):
-        result = self._call()
-        assert result["portal_dataset_count"] == 0
-        assert result["portal_relevant_count"] == 0
 
     def test_js_rendered_flag_propagated(self):
         client = _make_http_client(js_rendered=True)
@@ -591,8 +526,7 @@ class TestMainSkipLogic:
             "robots_allowed": True, "robots_status": "allowed", "js_rendered": False,
             "relevance_score": 0, "matched_keywords": [], "datasets_found": False,
             "dataset_urls": [], "dataset_formats": [], "crawl_depth_reached": 0,
-            "portal_platform": "", "portal_dataset_count": 0,
-            "portal_relevant_count": 0, "top_dataset_urls": [], "error_notes": "",
+            "portal_platform": "", "error_notes": "",
         }
         output_dir.mkdir(parents=True)
         with ReportWriter(output_dir) as w:
@@ -628,8 +562,7 @@ class TestMainSkipLogic:
             "robots_allowed": True, "robots_status": "allowed", "js_rendered": False,
             "relevance_score": 0, "matched_keywords": [], "datasets_found": False,
             "dataset_urls": [], "dataset_formats": [], "crawl_depth_reached": 0,
-            "portal_platform": "", "portal_dataset_count": 0,
-            "portal_relevant_count": 0, "top_dataset_urls": [], "error_notes": "",
+            "portal_platform": "", "error_notes": "",
         }
         with ReportWriter(prev_dir) as w:
             w.open()
@@ -676,8 +609,7 @@ class TestMainOutputCSV:
                 "robots_allowed": True, "robots_status": "allowed", "js_rendered": False,
                 "relevance_score": 5, "matched_keywords": ["county"],
                 "datasets_found": False, "dataset_urls": [], "dataset_formats": [],
-                "crawl_depth_reached": 0, "portal_platform": "", "portal_dataset_count": 0,
-                "portal_relevant_count": 0, "top_dataset_urls": [], "error_notes": "",
+                "crawl_depth_reached": 0, "portal_platform": "", "error_notes": "",
             }
 
         with patch("run._process_url", side_effect=fake_process), \

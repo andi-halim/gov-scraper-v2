@@ -94,15 +94,6 @@ class TestChicagoSocrataPortal:
         data = resp.json()
         assert "results" in data
 
-    def test_socrata_adapter_returns_datasets(self):
-        from crawler.http_client import HttpClient
-        from portals.socrata import SocrataAdapter
-        with HttpClient(delay=0) as client:
-            adapter = SocrataAdapter(self.URL, frozenset({"county", "budget", "district"}), client)
-            result = adapter.run()
-        assert result["portal_dataset_count"] > 0
-        assert isinstance(result["portal_relevant_count"], int)
-        assert isinstance(result["top_dataset_urls"], list)
 
 
 @pytest.mark.skipif(SKIP, reason=SKIP_REASON)
@@ -129,13 +120,6 @@ class TestDemoCKAN:
         data = resp.json()
         assert data.get("success")
 
-    def test_ckan_adapter_returns_datasets(self):
-        from crawler.http_client import HttpClient
-        from portals.ckan import CKANAdapter
-        with HttpClient(delay=0) as client:
-            adapter = CKANAdapter(self.URL, frozenset({"country", "population", "data"}), client)
-            result = adapter.run()
-        assert result["portal_dataset_count"] > 0
 
 
 @pytest.mark.skipif(SKIP, reason=SKIP_REASON)

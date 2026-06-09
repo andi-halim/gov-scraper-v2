@@ -30,9 +30,6 @@ def _full_result(**overrides) -> dict:
         "dataset_formats": ["csv"],
         "crawl_depth_reached": 1,
         "portal_platform": "",
-        "portal_dataset_count": 0,
-        "portal_relevant_count": 0,
-        "top_dataset_urls": [],
         "error_notes": "",
     }
     base.update(overrides)
@@ -137,10 +134,9 @@ class TestAppendRow:
         out = tmp_path / "run"
         with ReportWriter(out) as w:
             w.open()
-            w.append_row(_full_result(matched_keywords=[], top_dataset_urls=[]))
+            w.append_row(_full_result(matched_keywords=[]))
         row = _read_csv(out / "results.csv")[0]
         assert row["matched_keywords"] == ""
-        assert row["top_dataset_urls"] == ""
 
     def test_none_robots_allowed_serialized_as_empty_string(self, tmp_path):
         out = tmp_path / "run"
@@ -331,7 +327,6 @@ class TestMakeErrorRow:
         assert row["matched_keywords"] == []
         assert row["dataset_urls"] == []
         assert row["dataset_formats"] == []
-        assert row["top_dataset_urls"] == []
 
     def test_robots_allowed_is_none(self):
         row = ReportWriter.make_error_row("https://err.gov/", False, "err")

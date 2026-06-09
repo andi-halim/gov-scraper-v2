@@ -11,20 +11,11 @@ from crawler.http_client import HttpClient
 from crawler.orchestrator import crawl_url, load_urls
 from crawler.portal_detector import PortalDetector
 from crawler.robots import RobotsChecker
-from portals.arcgis_hub import ArcGISHubAdapter
-from portals.ckan import CKANAdapter
-from portals.socrata import SocrataAdapter
 from reporter.writer import ReportWriter
 from scorer.keyword_loader import get_effective_keywords
 from scorer.scorer import score_page
 
 logger = logging.getLogger(__name__)
-
-_PORTAL_ADAPTERS = {
-    "Socrata": SocrataAdapter,
-    "CKAN": CKANAdapter,
-    "ArcGIS Hub": ArcGISHubAdapter,
-}
 
 _DEFAULT_INPUT = "config/urls.csv"
 _DEFAULT_OUTPUT_ROOT = "output"
@@ -193,9 +184,6 @@ def _process_url(
         "dataset_formats": [],
         "crawl_depth_reached": 0,
         "portal_platform": "",
-        "portal_dataset_count": 0,
-        "portal_relevant_count": 0,
-        "top_dataset_urls": [],
         "error_notes": "",
     }
 
@@ -241,23 +229,9 @@ def _process_url(
     result["portal_platform"] = platform or ""
 
     if platform:
-        logger.info("Portal detected (%s) for %s — using API adapter", platform, url)
-        adapter_cls = _PORTAL_ADAPTERS[platform]
-        adapter = adapter_cls(final_url, effective_keywords, http_client)
-        portal_result = adapter.run()
-        if portal_result.get("portal_dataset_count", 0) > 0:
-            result["portal_dataset_count"] = portal_result["portal_dataset_count"]
-            result["portal_relevant_count"] = portal_result.get("portal_relevant_count", 0)
-            result["top_dataset_urls"] = portal_result.get("top_dataset_urls", [])
-            result["matched_keywords"] = portal_result.get("matched_keywords", [])
-            result["relevance_score"] = portal_result.get("relevance_score", 0)
-            return result
-        # API returned 0 datasets — false positive; fall through to depth crawler
-        logger.warning(
-            "Portal %s returned 0 datasets for %s — falling back to depth crawler",
-            platform, url,
-        )
-        result["portal_platform"] = ""
+        logger.info("Portal detected (%s) for %s — skipping depth crawl", platform, url)
+        result["relevance_score"] = None
+        return result
 
     # Step 6: depth crawl — pass pre-fetched seed to avoid re-fetching it
     pages, crawl_depth_reached = crawl_url(
