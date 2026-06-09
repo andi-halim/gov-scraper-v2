@@ -26,7 +26,7 @@ def _make_http_client(
 ):
     client = MagicMock()
     client.last_response_headers = response_headers or {}
-    client.fetch_page.return_value = (html, final_url, http_status, js_rendered)
+    client.fetch_page.return_value = (html, final_url, http_status, js_rendered, False)
     return client
 
 

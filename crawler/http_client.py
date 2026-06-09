@@ -120,10 +120,12 @@ class HttpClient:
         self._last_request[domain] = time.monotonic()
         return self._client.head(url, **kwargs)
 
-    def fetch_page(self, url: str) -> tuple[str, str, int, bool]:
+    def fetch_page(self, url: str) -> tuple[str, str, int, bool, bool]:
         """T-40: GET url, falling back to Playwright for JS-heavy or bot-challenged pages.
 
-        Returns (html, final_url, http_status, js_rendered).
+        Returns (html, final_url, http_status, js_rendered, cdn_blocked).
+        cdn_blocked is True when a CDN bot-challenge was detected but Playwright
+        failed to bypass it; False in all other cases (including successful bypass).
         Network errors propagate to the caller.
         """
         response = self.get(url)
@@ -132,6 +134,7 @@ class HttpClient:
         final_url = str(response.url)
         http_status = response.status_code
         js_rendered = False
+        cdn_blocked = False
         _playwright_tried = False
 
         if http_status == 200:
@@ -148,6 +151,7 @@ class HttpClient:
 
         headers = self.last_response_headers
         if not _playwright_tried and _is_bot_challenge(html, http_status, headers):
+            cdn_blocked = True  # assume blocked until bypass succeeds
             try:
                 from crawler.playwright_client import fetch_rendered
                 pw_html = fetch_rendered(final_url)
@@ -155,12 +159,13 @@ class HttpClient:
                     html = pw_html
                     http_status = 200
                     js_rendered = True
+                    cdn_blocked = False
                 else:
                     logger.warning("Playwright did not bypass bot protection for %s", url)
             except Exception as exc:
                 logger.warning("Playwright bot-bypass attempt failed for %s: %s", url, exc)
 
-        return html, final_url, http_status, js_rendered
+        return html, final_url, http_status, js_rendered, cdn_blocked
 
     def close(self) -> None:
         self._client.close()

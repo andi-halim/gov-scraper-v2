@@ -149,7 +149,7 @@ def crawl_url(
         url, hop = queue.popleft()
 
         try:
-            html, final_url, http_status, js_rendered = http_client.fetch_page(url)
+            html, final_url, http_status, js_rendered, _cdn = http_client.fetch_page(url)
         except Exception as exc:
             logger.warning("Fetch error for %s: %s", url, exc)
             pages.append(PageResult(url, "", 0, False))

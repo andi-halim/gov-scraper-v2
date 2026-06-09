@@ -211,7 +211,7 @@ def _process_url(
 
     # Step 2: fetch seed URL
     try:
-        html, final_url, http_status, js_rendered = http_client.fetch_page(url)
+        html, final_url, http_status, js_rendered, cdn_blocked = http_client.fetch_page(url)
     except Exception as exc:
         logger.warning("Network error fetching %s: %s", url, exc)
         result["error_notes"] = f"Network error: {exc}"
@@ -224,6 +224,11 @@ def _process_url(
 
     # Step 3: inactive URLs — write minimal row and continue
     if not result["active"]:
+        if cdn_blocked:
+            result["error_notes"] = (
+                f"Blocked by CDN (HTTP {http_status}; Playwright bypass failed)"
+            )
+            result["relevance_score"] = None
         return result
 
     # Step 4: resolve effective keywords from the manually-tagged state

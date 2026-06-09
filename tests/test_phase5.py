@@ -83,13 +83,16 @@ class TestExtractLinks:
 # ---------------------------------------------------------------------------
 
 def _make_client(pages: dict[str, tuple[str, str, int, bool]]) -> MagicMock:
-    """pages maps url → (html, final_url, http_status, js_rendered)."""
+    """pages maps url → (html, final_url, http_status, js_rendered).
+
+    fetch_page returns a 5-tuple with cdn_blocked=False appended automatically.
+    """
     client = MagicMock()
 
     def fetch_side_effect(url):
         if url in pages:
-            return pages[url]
-        return ("", url, 404, False)
+            return (*pages[url], False)
+        return ("", url, 404, False, False)
 
     client.fetch_page.side_effect = fetch_side_effect
     return client
@@ -354,10 +357,10 @@ class TestRedirectDeduplication:
         client = MagicMock()
         def fetch_side_effect(url):
             if url == seed:
-                return (final_html, final, 200, False)  # redirect
+                return (final_html, final, 200, False, False)  # redirect
             if url == child:
-                return (child_html, child, 200, False)
-            return ("", url, 404, False)
+                return (child_html, child, 200, False, False)
+            return ("", url, 404, False, False)
         client.fetch_page.side_effect = fetch_side_effect
 
         pages, _ = crawl_url(seed, client, depth=2)
@@ -379,10 +382,10 @@ class TestRedirectDeduplication:
         client = MagicMock()
         def fetch_side_effect(url):
             if url == seed:
-                return (final_html, final, 200, False)
+                return (final_html, final, 200, False, False)
             if url == other:
-                return ("<html><body>datasets</body></html>", other, 200, False)
-            return ("", url, 404, False)
+                return ("<html><body>datasets</body></html>", other, 200, False, False)
+            return ("", url, 404, False, False)
         client.fetch_page.side_effect = fetch_side_effect
 
         pages, _ = crawl_url(seed, client, depth=2)

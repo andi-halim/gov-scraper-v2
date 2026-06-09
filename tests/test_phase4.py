@@ -108,7 +108,7 @@ class TestFetchPage:
         rich = "<html><body>" + "word " * 60 + "</body></html>"
         resp = make_response(200, rich, {"content-type": "text/html"})
         client = self._make_client(resp)
-        html, final_url, status, rendered = client.fetch_page("http://example.gov/")
+        html, final_url, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert status == 200
         assert not rendered
         assert "word" in html
@@ -117,7 +117,7 @@ class TestFetchPage:
         resp = make_response(404, "Not found", {"content-type": "text/html"})
         client = self._make_client(resp)
         with patch("crawler.playwright_client.fetch_rendered") as mock_pw:
-            html, _, status, rendered = client.fetch_page("http://example.gov/")
+            html, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         mock_pw.assert_not_called()
         assert status == 404
         assert not rendered
@@ -130,7 +130,7 @@ class TestFetchPage:
         rendered_html = "<html><body>fully rendered content here now</body></html>"
         with patch.object(pwc, "fetch_rendered", return_value=rendered_html):
             with patch("crawler.http_client._is_js_heavy", return_value=True):
-                html, _, status, rendered = client.fetch_page("http://example.gov/")
+                html, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert rendered
         assert html == rendered_html
 
@@ -141,7 +141,7 @@ class TestFetchPage:
         client = self._make_client(resp)
         with patch.object(pwc, "fetch_rendered", side_effect=RuntimeError("browser crash")):
             with patch("crawler.http_client._is_js_heavy", return_value=True):
-                html, _, status, rendered = client.fetch_page("http://example.gov/")
+                html, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert not rendered
         assert html == sparse
 
@@ -149,7 +149,7 @@ class TestFetchPage:
         resp = make_response(200, "{}", {"content-type": "application/json"})
         client = self._make_client(resp)
         with patch("crawler.playwright_client.fetch_rendered") as mock_pw:
-            _, _, status, rendered = client.fetch_page("http://example.gov/api")
+            _, _, status, rendered, _ = client.fetch_page("http://example.gov/api")
         mock_pw.assert_not_called()
         assert not rendered
 
@@ -159,7 +159,7 @@ class TestFetchPage:
         real_html = "<html><body>" + "word " * 60 + "</body></html>"
         import crawler.playwright_client as pwc
         with patch.object(pwc, "fetch_rendered", return_value=real_html):
-            html, _, status, rendered = client.fetch_page("http://example.gov/")
+            html, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert rendered
         assert status == 200
         assert html == real_html
@@ -170,7 +170,7 @@ class TestFetchPage:
         client = self._make_client(resp)
         import crawler.playwright_client as pwc
         with patch.object(pwc, "fetch_rendered", return_value=cf_html):
-            _, _, status, rendered = client.fetch_page("http://example.gov/")
+            _, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert not rendered
         assert status == 403
 
@@ -179,7 +179,7 @@ class TestFetchPage:
         client = self._make_client(resp)
         import crawler.playwright_client as pwc
         with patch.object(pwc, "fetch_rendered", side_effect=RuntimeError("browser crash")):
-            html, _, status, rendered = client.fetch_page("http://example.gov/")
+            html, _, status, rendered, _ = client.fetch_page("http://example.gov/")
         assert not rendered
         assert status == 403
         assert html == "<html>blocked</html>"
@@ -192,9 +192,45 @@ class TestFetchPage:
         import crawler.playwright_client as pwc
         with patch.object(pwc, "fetch_rendered", return_value=real_html) as mock_pw:
             with patch("crawler.http_client._is_js_heavy", return_value=True):
-                _, _, _, rendered = client.fetch_page("http://example.gov/")
+                _, _, _, rendered, _ = client.fetch_page("http://example.gov/")
         assert mock_pw.call_count == 1
         assert rendered
+
+    def test_cdn_blocked_false_when_no_challenge(self):
+        rich = "<html><body>" + "word " * 60 + "</body></html>"
+        resp = make_response(200, rich, {"content-type": "text/html"})
+        client = self._make_client(resp)
+        _, _, _, _, cdn_blocked = client.fetch_page("http://example.gov/")
+        assert not cdn_blocked
+
+    def test_cdn_blocked_false_when_bypass_succeeds(self):
+        resp = make_response(403, "<html>cf challenge</html>", {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        real_html = "<html><body>" + "word " * 60 + "</body></html>"
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", return_value=real_html):
+            _, _, status, _, cdn_blocked = client.fetch_page("http://example.gov/")
+        assert status == 200
+        assert not cdn_blocked
+
+    def test_cdn_blocked_true_when_playwright_cannot_bypass(self):
+        cf_html = "<html><body><script>window._cf_chl_opt={}</script></body></html>"
+        resp = make_response(403, cf_html, {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", return_value=cf_html):
+            _, _, status, _, cdn_blocked = client.fetch_page("http://example.gov/")
+        assert status == 403
+        assert cdn_blocked
+
+    def test_cdn_blocked_true_when_playwright_throws(self):
+        resp = make_response(403, "<html>blocked</html>", {"cf-ray": "abc-LAX"})
+        client = self._make_client(resp)
+        import crawler.playwright_client as pwc
+        with patch.object(pwc, "fetch_rendered", side_effect=RuntimeError("crash")):
+            _, _, status, _, cdn_blocked = client.fetch_page("http://example.gov/")
+        assert status == 403
+        assert cdn_blocked
 
 
 # ---------------------------------------------------------------------------
