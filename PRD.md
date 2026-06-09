@@ -99,7 +99,7 @@ A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is avail
   - **Akamai:** `Server: AkamaiGHost` with HTTP 403.
   - **Azure WAF:** `Azure WAF JS Challenge` in the response body on any status.
   - Header-based signals are restricted to 403 to avoid retrying legitimate CDN-proxied 200 responses. Body tokens fire on any status to catch JS challenges served as 200.
-  - The Playwright result is accepted only if the same bot-challenge signals are absent from the rendered HTML; if the challenge persists, the original 403 is kept and a warning is logged.
+  - The Playwright result is accepted only if the same bot-challenge signals are absent from the rendered HTML; if the challenge persists, the original 403 is kept, `cdn_blocked=True` is set, and a warning is logged. CDN-blocked URLs receive `relevance_score=null` and a descriptive `error_notes` entry.
   - Politeness: the bypass is consistent with `robots.txt` compliance — the CDN block is a heuristic layer, not the site's stated crawl policy. The bypass only fires after `robots.txt` has already been checked and access is permitted.
 - Record `js_rendered: true` in the output row when Playwright was used (covers both JS-heavy and bot-bypass cases).
 
@@ -116,7 +116,7 @@ A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is avail
   | Link anchor text | 15 pts |
 
 - **Score formula:** `relevance_score = min(100, round(weighted_hits / normalization_factor * 100))`
-  where `normalization_factor` scales relative to the total number of unique keywords in the effective set.
+  where `normalization_factor = base_keyword_count()` — fixed at the count of terms in `config/keywords.csv`. State-specific terms extend the numerator (more keywords can match) without inflating the denominator, so state-tagged URLs are not penalized for having a larger effective keyword set.
 - URL and domain text do not contribute to the score.
 - Record `relevance_score` (0–100) and `matched_keywords` (pipe-separated list of matched terms).
 
@@ -129,8 +129,9 @@ Scan all pages visited during the crawl (up to depth 2) for links to downloadabl
   - Link `href` ends with a detected extension.
   - Link `href` contains a detected extension before a query string (e.g., `download.php?file=data.csv`).
   - HTTP `Content-Disposition: attachment` header on a followed link.
-- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated), `dataset_formats` (pipe-separated, deduplicated).
+- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated, capped at 50 entries), `dataset_formats` (pipe-separated, deduplicated).
 - PDF links are included in `dataset_urls` with format `pdf`; they are not combined with machine-readable format flags.
+- If more than 50 dataset URLs are detected, the list is truncated to the first 50 and a warning is logged.
 
 ### FR-9: Priority URL Handling
 
@@ -155,9 +156,9 @@ Scan all pages visited during the crawl (up to depth 2) for links to downloadabl
 - **Auto-detect mode** (when `--states` is omitted): compares `config/state_abbrev.json` against the existing output to identify states that are absent, have empty `census_terms`, or have error notes, then prompts for confirmation before processing. Stops after `--max-requests` API calls (default 20, matching the Gemini free-tier RPD cap). Retries transient 429 and 503 errors up to 3 times; each retry counts against the daily limit. Results are always merged into the existing file — prior entries are never overwritten. A post-run summary logs how many states remain.
 - **Manual mode** (`--states XX,YY`): processes exactly the specified states with no request cap; results are merged into the existing file.
 
-### FR-12: Open Data Portal Detection and Routing
+### FR-12: Open Data Portal Detection
 
-After the initial page fetch (FR-6), apply a two-pass detection process before the depth crawler and scorer run. If a known open data platform is identified, route the URL to a platform-specific API adapter and skip the standard depth crawler.
+After the initial page fetch (FR-6), apply a two-pass detection process before the depth crawler and scorer run. If a known open data platform is identified, record the platform, set `relevance_score` to null, and skip the depth crawl and scorer. Portal dataset enumeration via API is future work.
 
 **Pass 1 — Passive detection (zero extra requests)**
 
@@ -182,13 +183,13 @@ Issue a single GET to the platform's canonical status or catalog endpoint:
 If passive signals point to multiple platforms (rare), the active API probe result takes precedence.
 
 **Routing:**
-- Portal detected → skip depth crawler; call the appropriate adapter (see §12).
+- Portal detected → record `portal_platform`; set `relevance_score` to null; skip depth crawl and scorer.
 - No portal detected → proceed with the standard depth crawler and scorer.
 
 **Known site-specific behaviour:**
 - `catalog.data.gov` — as of 2026, this site has migrated from CKAN to a custom Next.js SPA. All CKAN API endpoints (`/api/3/action/*`) return 404 and passive signals are absent. The portal detector correctly falls through; the site is processed as a plain page via the standard depth crawler.
 
-**Output:** record `portal_platform` (`Socrata`, `CKAN`, `ArcGIS Hub`, or empty string), `portal_dataset_count` (total datasets in catalog), `portal_relevant_count` (datasets with score > 0), and `top_dataset_urls` (pipe-separated, up to 10, sorted by relevance score descending).
+**Output:** record `portal_platform` (`Socrata`, `CKAN`, `ArcGIS Hub`, or empty string). `relevance_score` is null for detected portal URLs.
 
 ---
 
@@ -204,9 +205,9 @@ For `FEDERAL` / `NATIONAL` URLs: `effective_keywords = set(keywords.csv)`.
 
 ### Normalization factor
 
-`normalization_factor = len(effective_keywords)`
+`normalization_factor = base_keyword_count()`
 
-This ensures that a state with more Census terms (e.g., a state with rich special-district vocabulary) does not produce artificially inflated scores relative to a state with fewer terms.
+Fixed at the number of terms in `config/keywords.csv`. State-specific terms extend the effective keyword set (increasing the numerator when they match) without inflating the denominator, so URLs in states with rich Census vocabulary are not penalized relative to NATIONAL URLs.
 
 ### Weighted hit calculation
 
@@ -320,7 +321,8 @@ config/urls.csv  (STATE column pre-populated by analyst)
   |      |                                  |
   | [PortalDetector]  (passive → API probe) |
   |      |                                  |
-  |  if portal: [PortalAdapter] (API-first) |
+  |  if portal: record platform,            |
+  |             score=null, skip crawl      |
   |  else:      [Crawler]  depth=2          |
   |    prefetched_seed avoids re-fetch      |
   |    child hops via httpx + Playwright    |
@@ -361,11 +363,6 @@ gov-scraper-v2/
     playwright_client.py
     dataset_detector.py
     portal_detector.py
-  portals/
-    __init__.py
-    socrata.py
-    ckan.py
-    arcgis_hub.py
   scorer/
     scorer.py
     keyword_loader.py
@@ -378,47 +375,23 @@ gov-scraper-v2/
     test_integration_urls.py          # skipped by default; set RUN_INTEGRATION_TESTS=1
   output/                         # gitignored
   page_result.py                  # PageResult NamedTuple shared across packages
-  utils.py                        # normalize_text() shared between scorer and portals
+  utils.py                        # normalize_text() shared text helper
   run.py                          # entrypoint
 ```
 
 ---
 
-## 12. Portal Detection Adapters
+## 12. Portal Detection (Future: Adapter Enumeration)
 
-Each adapter enumerates all datasets in a detected portal's catalog via API, scores each dataset's metadata against the effective keyword set, and returns an aggregated result for the output row.
+Portal detection (FR-12) identifies whether a URL is a known open data platform. Detection is the only behavior in the current implementation. When a portal is detected, `portal_platform` is recorded and `relevance_score` is left null — the depth crawler and scorer are skipped.
 
-### Shared adapter contract
+Platform-specific adapter enumeration (paginating the dataset catalog via API and scoring individual dataset metadata) is scoped out for a future iteration. The detection signals and API endpoints documented below serve as the specification for that work when it is implemented:
 
-Each adapter receives `(base_url: str, effective_keywords: frozenset, http_client)` and returns:
-
-```python
-{
-    "portal_dataset_count": int,
-    "portal_relevant_count": int,    # datasets with relevance_score > 0
-    "top_dataset_urls": list[str],   # up to 10, sorted by relevance score desc
-    "matched_keywords": list[str],   # union of all matched keywords across datasets
-    "relevance_score": int           # max relevance score across all datasets
-}
-```
-
-Metadata scoring: concatenate each dataset's title, description, and tags into a single text block; run the same weighted keyword matcher from FR-7; record per-dataset score. URL and domain text are excluded from scoring (consistent with FR-7).
-
-### Socrata / Tyler Technologies adapter
-
-- Endpoint: `GET /api/catalog/v1?limit=100&offset=N` — paginate until all datasets are retrieved.
-- Per dataset: extract `resource.name`, `resource.description`, `classification.domain_tags`, `resource.type`, `permalink`.
-- Apply the same per-domain delay as FR-4 between paginated requests.
-
-### CKAN adapter
-
-- Endpoint: `GET /api/3/action/package_search?rows=100&start=N` — retrieve all dataset metadata in batches (more efficient than per-ID `package_show` lookup).
-- Per dataset: extract `title`, `notes`, `tags[].name`, `resources[].format`, `resources[].url`.
-
-### ArcGIS Hub adapter
-
-- Endpoint: `GET /api/v3/datasets?page[size]=100&page[number]=N` — paginate until complete.
-- Per dataset: extract `attributes.name`, `attributes.description`, `attributes.tags`, `attributes.access.urls.download`.
+| Platform | Detection | Future API endpoint |
+|---|---|---|
+| Socrata / Tyler Technologies | Footer text, `X-Socrata-RequestId` header, scripts from `*.socrata.com` / `*.tylertech.com` | `GET /api/catalog/v1?limit=100&offset=N` |
+| CKAN | `<meta name="generator" content="ckan">`, body class `ckan-*`, inline `ckan.module(` JS | `GET /api/3/action/package_search?rows=100&start=N` |
+| ArcGIS Hub | Custom elements `<hub-hero>` / `<hub-gallery>`, scripts from `js.arcgis.com`, domain `*.hub.arcgis.com` | `GET /api/v3/datasets?page[size]=100&page[number]=N` |
 
 ---
 
@@ -438,16 +411,13 @@ Metadata scoring: concatenate each dataset's title, description, and tags into a
 | `robots_allowed` | boolean | `true` if crawl was permitted by robots.txt; `null` if unavailable |
 | `robots_status` | string | `allowed`, `disallowed`, or `unavailable` |
 | `js_rendered` | boolean | `true` if Playwright was used to render the page |
-| `relevance_score` | integer | 0–100 Census relevance score |
+| `relevance_score` | integer | 0–100 Census relevance score; null (empty cell) for detected portals and CDN-blocked URLs |
 | `matched_keywords` | string | Pipe-separated list of matched keywords |
 | `datasets_found` | boolean | `true` if at least one downloadable file was detected |
-| `dataset_urls` | string | Pipe-separated list of detected dataset URLs |
+| `dataset_urls` | string | Pipe-separated list of detected dataset URLs (capped at 50) |
 | `dataset_formats` | string | Pipe-separated deduplicated format list (e.g., `csv\|xlsx\|pdf`) |
 | `crawl_depth_reached` | integer | Deepest hop level successfully crawled (0–2) |
 | `portal_platform` | string | `Socrata`, `CKAN`, `ArcGIS Hub`, or empty string if not a portal |
-| `portal_dataset_count` | integer | Total datasets enumerated via portal API; 0 for non-portal URLs |
-| `portal_relevant_count` | integer | Datasets with relevance score > 0; 0 for non-portal URLs |
-| `top_dataset_urls` | string | Pipe-separated list of up to 10 dataset URLs sorted by score; empty for non-portal URLs |
 | `error_notes` | string | Description of any errors encountered; empty if none |
 
 `RESOURCE_NAME` is intentionally excluded from the output.
@@ -508,6 +478,7 @@ The scorer is designed as a pluggable interface. The following modes can be adde
 | **4** | Gemini 2.0 Flash free tier | Free, API key required | Highest quality; 15 RPM / 1500 req/day limit |
 
 Additional enhancements:
+- **Portal adapter enumeration**: implement Socrata, CKAN, and ArcGIS Hub adapters (see §12) to paginate each portal's dataset catalog, score individual dataset metadata against Census vocabulary, and populate `portal_dataset_count`, `portal_relevant_count`, and `top_dataset_urls` output columns.
 - **Incremental re-crawl**: on re-run, skip URLs whose `final_url` and `http_status` match the previous run's output (no site state change detected).
 - **Configurable crawl depth**: expose `--depth` beyond 2 for deeper dataset discovery.
 - **Structured dataset metadata**: where possible, attempt a HEAD request on detected dataset URLs to capture `Content-Length` and `Last-Modified`.

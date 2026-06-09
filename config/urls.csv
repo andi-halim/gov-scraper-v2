@@ -1,17 +1,4 @@
 ﻿RESOURCE_NAME,WEB_ADDRESS,PRIORITY_RESOURCE,STATE
-Open Alabama,https://data.algeohub.opendata.arcgis.com/,,AL
-Alaska Open Data Portal,https://gis.data.alaska.gov/,,AK
-Arizona Open Data Portal,https://azgeo-open-data-agic.hub.arcgis.com/,,AZ
-Arkansas Open Data, https://gis.arkansas.gov/,,AR
-California Open Data Portal, https://data.ca.gov/,,CA
-Colorado Information Marketplace, https://data.colorado.gov/,,CO
-Connecticut Open Data,https://data.ct.gov/,,CT
-Delaware Open Data,https://data.delaware.gov/,,DE
-Open Data DC,https://opendata.dc.gov/,,DC
-Florida Open Data,https://www.floridadata.org/,,FL
-Georgia Open Data,https://data.georgia.gov/,,GA
-Hawaii Open Data,https://data.hawaii.gov/,,HI
-Idaho Geospatial Data Clearinghouse,https://gis.idaho.gov/,,ID
 "Advocates for Calm Traffic (Norwalk, CT)",http://calmtraffic.org/NonprofitsandNeighborhoodAssociationsinNorwalk.htm,,CT
 Airports Council International - North America,http://www.aci-na.org/,,NATIONAL
 "AK Dept of Commerce, Municipal Directory",http://www.commerce.state.ak.us/dca/MuniDirPublic/MODP.htm,,AK
@@ -384,3 +371,54 @@ Wyoming Retirement System,,,WY
 Yavapai County Special Districts Administration,http://www.co.yavapai.az.us/sd.aspx,,AZ
 Junta de Supervision y Administraction Financiera para Puerto Rico (Puerto Rico's Financial Oversight & Management Board),https://oversightboard.pr.gov,,PR
 Oficina de Gerencia Y Presupuesto (Puerto Rico Office of Management & Budget),https://ogp.pr.gov,,PR
+Open Alabama,https://data.algeohub.opendata.arcgis.com/,,AL
+Alaska Open Data Portal,https://gis.data.alaska.gov/,,AK
+Arizona Open Data Portal,https://azgeo-open-data-agic.hub.arcgis.com/,,AZ
+Arkansas Open Data,https://gis.arkansas.gov/,,AR
+California Open Data Portal,https://data.ca.gov/,,CA
+Colorado Information Marketplace,https://data.colorado.gov/,,CO
+Connecticut Open Data,https://data.ct.gov/,,CT
+Delaware Open Data,https://data.delaware.gov/,,DE
+Open Data DC,https://opendata.dc.gov/,,DC
+Florida Open Data,https://www.floridadata.org/,,FL
+Georgia Open Data,https://data.georgia.gov/,,GA
+Hawaii Open Data,https://data.hawaii.gov/,,HI
+Idaho Geospatial Data Clearinghouse,https://gis.idaho.gov/,,ID
+Data.Illinois.gov,https://data.illinois.gov/,,IL
+Indiana Data Hub,https://hub.mph.in.gov/,,IN
+Iowa Data Portal,https://data.iowa.gov/,,IA
+Kansas Open Data,http://www.kansasopengov.org/kog/databank,,KS
+Kentucky Open Data,https://opengisdata.ky.gov/,,KY
+Louisiana Geospatial Data Center,https://www.doa.la.gov/doa/osl/gis-data/,,LA
+Maine Open Data,https://dmr-maine.opendata.arcgis.com/,,ME
+Maryland Open Data Portal,https://opendata.maryland.gov/,,MD
+Massachusetts Open Data,https://data.mass.gov/,,MA
+Michigan Open Data Portal,https://data.michigan.gov/,,MI
+Minnesota Geospatial Commons,https://gisdata.mn.gov/,,MN
+Mississippi Geospatial Data Clearinghouse,https://opendata.gis.ms.gov/,,MS
+Missouri Data Portal,https://data.mo.gov/,,MO
+Montana State Library Open Data Portal,https://data.mt.gov/,,MT
+Nebraska Open Data,https://data.nebraska.gov/,,NE
+Nevada Open Data,https://open.nv.gov/,,NV
+New Hampshire Open Data,https://wisdom.dhhs.nh.gov/wisdom/,,NH
+NJ Data Hub,https://data.nj.gov/,,NJ
+New Mexico Open Data,https://api.env.nm.gov/,,NM
+Open NY,https://data.ny.gov/,,NY
+NC Open Data,https://www.nconemap.gov/,,NC
+North Dakota GIS Data Portal,https://www.gis.nd.gov/,,ND
+Ohio Open Data Portal,https://data.ohio.gov/,,OH
+Oklahoma Data,https://data.ok.gov/,,OK
+Oregon Geospatial Data Clearinghouse,https://data.oregon.gov/,,OR
+Pennsylvania Open Data Portal,https://data.pa.gov/,,PA
+Rhode Island Open Data Portal,https://municipalfinance.ri.gov/municipal-transparency,,RI
+South Carolina Revenue and Fiscal Affairs Office,https://rfa.sc.gov/data-research,,SC
+Open SD,https://open.sd.gov/,,SD
+Tennessee Open Data,https://data.tn.gov/,,TN
+Texas Open Data Portal,https://data.texas.gov/,,TX
+Utah Open Data,https://opendata.utah.gov/,,UT
+Vermont Open Geodata,https://geodata.vermont.gov,,VT
+Virginia Open Data Portal,https://data.virginia.gov/,,VA
+Washington State Geospatial Open Data Portal,https://geo.wa.gov/,,WA
+WV Open Data Portal,https://data-wvdot.opendata.arcgis.com/,,WV
+Wisconsin Data Portal,https://data-wisdot.opendata.arcgis.com/,,WI
+Wyoming GeoHub,https://wyogeo.org/,,WY

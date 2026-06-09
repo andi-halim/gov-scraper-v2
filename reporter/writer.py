@@ -152,7 +152,7 @@ class ReportWriter:
             "robots_allowed": None,
             "robots_status": "",
             "js_rendered": False,
-            "relevance_score": 0,
+            "relevance_score": None,
             "matched_keywords": [],
             "datasets_found": False,
             "dataset_urls": [],

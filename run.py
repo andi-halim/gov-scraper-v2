@@ -203,6 +203,7 @@ def _process_url(
     except Exception as exc:
         logger.warning("Network error fetching %s: %s", url, exc)
         result["error_notes"] = f"Network error: {exc}"
+        result["relevance_score"] = None
         return result
 
     result["final_url"] = final_url
