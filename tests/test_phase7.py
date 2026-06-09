@@ -227,20 +227,22 @@ class TestScorePageWeighting:
         )
         heading_only = _page("http://x.gov/", "<h1>county</h1>")
 
-        all_result = score_page([all_tiers], kws)
-        heading_result = score_page([heading_only], kws)
+        with patch("scorer.scorer.base_keyword_count", return_value=1):
+            all_result = score_page([all_tiers], kws)
+            heading_result = score_page([heading_only], kws)
 
         assert all_result["relevance_score"] > heading_result["relevance_score"]
 
     def test_max_one_point_per_keyword(self):
         # keyword in all three tiers: max 0.50+0.35+0.15 = 1.00 pts
-        # with 1 keyword, normalization_factor=1, score = min(100, round(1.00/1*100)) = 100
+        # with normalization_factor=1, score = min(100, round(1.00/1*100)) = 100
         kws = _kw("county")
         html = (
             "<html><head><title>county</title></head>"
             "<body><h1>county</h1><p>county</p><a href='#'>county</a></body></html>"
         )
-        result = score_page([_page("http://x.gov/", html)], kws)
+        with patch("scorer.scorer.base_keyword_count", return_value=1):
+            result = score_page([_page("http://x.gov/", html)], kws)
         assert result["relevance_score"] == 100
 
     def test_score_capped_at_100(self):
@@ -254,7 +256,8 @@ class TestScorePageWeighting:
         # decompose. 0.50/4 * 100 = 12.5 → rounds to 13
         kws = _kw("county", "municipal", "township", "borough")
         html = "<h1>county</h1>"
-        result = score_page([_page("http://x.gov/", html)], kws)
+        with patch("scorer.scorer.base_keyword_count", return_value=4):
+            result = score_page([_page("http://x.gov/", html)], kws)
         assert 10 <= result["relevance_score"] <= 15
 
     def test_cross_page_tier_accumulation(self):
@@ -264,9 +267,10 @@ class TestScorePageWeighting:
         p1 = _page("http://x.gov/", "<h1>county</h1>")
         p2 = _page("http://x.gov/p2", "<body><p>county records</p></body>")
 
-        result_both = score_page([p1, p2], kws)
-        result_heading_only = score_page([p1], kws)
-        result_body_only = score_page([p2], kws)
+        with patch("scorer.scorer.base_keyword_count", return_value=1):
+            result_both = score_page([p1, p2], kws)
+            result_heading_only = score_page([p1], kws)
+            result_body_only = score_page([p2], kws)
 
         assert result_heading_only["relevance_score"] == 50
         assert result_body_only["relevance_score"] == 35
@@ -374,7 +378,8 @@ class TestScorePageNormalization:
     def test_whole_word_boundary_matches_standalone(self):
         kws = _kw("county")
         html = "<body><p>county records available here</p></body>"
-        result = score_page([_page("http://x.gov/", html)], kws)
+        with patch("scorer.scorer.base_keyword_count", return_value=1):
+            result = score_page([_page("http://x.gov/", html)], kws)
         assert result["relevance_score"] > 0
 
     def test_multi_word_keyword_matched(self):

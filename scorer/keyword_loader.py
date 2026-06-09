@@ -38,6 +38,15 @@ def _state_defs() -> dict:
     return _load_state_defs(_STATE_DEFS_PATH)
 
 
+def base_keyword_count() -> int:
+    """Return the number of keywords in the base keywords.csv file.
+
+    Used as the normalization denominator so state-specific extra terms
+    don't inflate the effective-keyword count and suppress scores.
+    """
+    return len(_base_keywords())
+
+
 def get_effective_keywords(state: str) -> frozenset[str]:
     """Return the effective keyword set for a given state tag.
 

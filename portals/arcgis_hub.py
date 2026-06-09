@@ -62,7 +62,9 @@ class ArcGISHubAdapter:
             name = attrs.get("name", "") or ""
             description = attrs.get("description", "") or ""
             tags = " ".join(attrs.get("tags") or [])
-            access = attrs.get("access", {}) or {}
+            access = attrs.get("access") or {}
+            if not isinstance(access, dict):
+                access = {}
             urls = access.get("urls", {}) or {}
             ds_url = urls.get("download", "") or ""
 

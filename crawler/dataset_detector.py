@@ -118,6 +118,14 @@ def detect_datasets(
                 if fmt:  # Empty string = attachment present but format unknown; skip format label
                     format_set.add(fmt)
 
+    _MAX_DATASET_URLS = 50
+    if len(dataset_urls) > _MAX_DATASET_URLS:
+        logger.warning(
+            "Dataset URL count (%d) exceeds cap of %d; truncating",
+            len(dataset_urls), _MAX_DATASET_URLS,
+        )
+        dataset_urls = dataset_urls[:_MAX_DATASET_URLS]
+
     found = bool(dataset_urls)
     formats = sorted(format_set)
     return found, dataset_urls, formats

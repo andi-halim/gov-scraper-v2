@@ -240,12 +240,19 @@ def _process_url(
         adapter_cls = _PORTAL_ADAPTERS[platform]
         adapter = adapter_cls(final_url, effective_keywords, http_client)
         portal_result = adapter.run()
-        result["portal_dataset_count"] = portal_result.get("portal_dataset_count", 0)
-        result["portal_relevant_count"] = portal_result.get("portal_relevant_count", 0)
-        result["top_dataset_urls"] = portal_result.get("top_dataset_urls", [])
-        result["matched_keywords"] = portal_result.get("matched_keywords", [])
-        result["relevance_score"] = portal_result.get("relevance_score", 0)
-        return result
+        if portal_result.get("portal_dataset_count", 0) > 0:
+            result["portal_dataset_count"] = portal_result["portal_dataset_count"]
+            result["portal_relevant_count"] = portal_result.get("portal_relevant_count", 0)
+            result["top_dataset_urls"] = portal_result.get("top_dataset_urls", [])
+            result["matched_keywords"] = portal_result.get("matched_keywords", [])
+            result["relevance_score"] = portal_result.get("relevance_score", 0)
+            return result
+        # API returned 0 datasets — false positive; fall through to depth crawler
+        logger.warning(
+            "Portal %s returned 0 datasets for %s — falling back to depth crawler",
+            platform, url,
+        )
+        result["portal_platform"] = ""
 
     # Step 6: depth crawl — pass pre-fetched seed to avoid re-fetching it
     pages, crawl_depth_reached = crawl_url(

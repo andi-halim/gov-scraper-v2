@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup, Comment
 
 from page_result import PageResult
+from scorer.keyword_loader import base_keyword_count
 from utils import normalize_text as _normalize, plural_aware_pattern as _plural_pattern
 
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
@@ -87,7 +88,7 @@ def score_page(pages: list[PageResult], effective_keywords: frozenset) -> dict:
     body_norm = _normalize(" ".join(body_parts))
     anchor_norm = _normalize(" ".join(anchor_parts))
 
-    normalization_factor = len(effective_keywords)
+    normalization_factor = base_keyword_count()
     weighted_hits = 0.0
     matched: list[str] = []
 
