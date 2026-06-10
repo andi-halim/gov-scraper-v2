@@ -98,7 +98,7 @@ def crawl_url(
     depth: int = 2,
     prefetched_seed: tuple | None = None,
     max_pages: int = _DEFAULT_MAX_PAGES,
-) -> tuple[list[PageResult], int]:
+) -> tuple[list[PageResult], int, dict[str, int]]:
     """T-50/T-51/T-52: BFS depth crawler.
 
     Fetches seed_url and follows same-domain internal links up to `depth` hops.
@@ -118,6 +118,7 @@ def crawl_url(
     """
     pages: list[PageResult] = []
     visited: set[str] = set()
+    page_depths: dict[str, int] = {}
     crawl_depth_reached = 0
 
     seed_domain = _registered_domain(seed_url)
@@ -129,6 +130,7 @@ def crawl_url(
     if prefetched_seed is not None:
         html, final_url, http_status, js_rendered = prefetched_seed
         pages.append(PageResult(seed_url, html, http_status, js_rendered))
+        page_depths[seed_url] = 0
         if final_url != seed_url:
             visited.add(final_url)
         if http_status == 200 and depth > 0:
@@ -156,6 +158,7 @@ def crawl_url(
             continue
 
         pages.append(PageResult(url, html, http_status, js_rendered))
+        page_depths[url] = hop
 
         # Guard the resolved URL so a redirect target is never fetched twice
         if final_url != url:
@@ -180,4 +183,4 @@ def crawl_url(
             visited.add(link)
             queue.append((link, hop + 1))
 
-    return pages, crawl_depth_reached
+    return pages, crawl_depth_reached, page_depths

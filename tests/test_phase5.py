@@ -106,7 +106,7 @@ class TestCrawlUrlBasic:
     def test_single_page_no_links(self):
         seed = "https://example.gov/"
         client = _make_client({seed: ("<html><body>No links</body></html>", seed, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         assert len(pages) == 1
         assert pages[0][0] == seed
         assert pages[0][2] == 200
@@ -114,13 +114,13 @@ class TestCrawlUrlBasic:
     def test_depth_reached_zero_for_seed_only(self):
         seed = "https://example.gov/"
         client = _make_client({seed: ("<html><body>content</body></html>", seed, 200, False)})
-        _, depth = crawl_url(seed, client, depth=2)
+        _, depth, _ = crawl_url(seed, client, depth=2)
         assert depth == 0
 
     def test_seed_non_200_stops_crawl(self):
         seed = "https://example.gov/"
         client = _make_client({seed: ("", seed, 404, False)})
-        pages, depth = crawl_url(seed, client, depth=2)
+        pages, depth, _ = crawl_url(seed, client, depth=2)
         assert len(pages) == 1
         assert pages[0][2] == 404
         assert depth == 0
@@ -129,7 +129,7 @@ class TestCrawlUrlBasic:
         client = MagicMock()
         client.fetch_page.side_effect = ConnectionError("timeout")
         seed = "https://example.gov/"
-        pages, depth = crawl_url(seed, client, depth=2)
+        pages, depth, _ = crawl_url(seed, client, depth=2)
         assert len(pages) == 1
         assert pages[0][0] == seed
         assert pages[0][2] == 0
@@ -140,7 +140,7 @@ class TestCrawlUrlBasic:
         seed = "https://example.gov/"
         html = "<html><body>rendered</body></html>"
         client = _make_client({seed: (html, seed, 200, True)})
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         assert pages[0][1] == html
         assert pages[0][3] is True
 
@@ -162,7 +162,7 @@ class TestCrawlUrlBFS:
             child: ("<html><body>About</body></html>", child, 200, False),
         }
         client = _make_client(pages_map)
-        pages, depth = crawl_url(seed, client, depth=2)
+        pages, depth, _ = crawl_url(seed, client, depth=2)
         urls = [p[0] for p in pages]
         assert seed in urls
         assert child in urls
@@ -178,7 +178,7 @@ class TestCrawlUrlBFS:
             grandchild: ("<html><body>deep</body></html>", grandchild, 200, False),
         }
         client = _make_client(pages_map)
-        pages, depth = crawl_url(seed, client, depth=2)
+        pages, depth, _ = crawl_url(seed, client, depth=2)
         urls = [p[0] for p in pages]
         assert grandchild in urls
         assert depth == 2
@@ -191,7 +191,7 @@ class TestCrawlUrlBFS:
             child: ("<html><body>About</body></html>", child, 200, False),
         }
         client = _make_client(pages_map)
-        pages, _ = crawl_url(seed, client, depth=0)
+        pages, _, _ = crawl_url(seed, client, depth=0)
         assert len(pages) == 1
         assert pages[0][0] == seed
 
@@ -205,7 +205,7 @@ class TestCrawlUrlBFS:
             grandchild: ("<html><body>deep</body></html>", grandchild, 200, False),
         }
         client = _make_client(pages_map)
-        pages, depth = crawl_url(seed, client, depth=1)
+        pages, depth, _ = crawl_url(seed, client, depth=1)
         urls = [p[0] for p in pages]
         assert seed in urls
         assert child in urls
@@ -223,7 +223,7 @@ class TestCrawlUrlExternalFilter:
         external = "https://census.gov/data"
         html = f'<html><body><a href="{external}">Census</a></body></html>'
         client = _make_client({seed: (html, seed, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         urls = [p[0] for p in pages]
         assert external not in urls
         assert len(pages) == 1
@@ -237,7 +237,7 @@ class TestCrawlUrlExternalFilter:
             sub: ("<html><body>datasets</body></html>", sub, 200, False),
         }
         client = _make_client(pages_map)
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         urls = [p[0] for p in pages]
         assert sub in urls
 
@@ -246,7 +246,7 @@ class TestCrawlUrlExternalFilter:
         external = "https://example.com/page"
         html = f'<html><body><a href="{external}">External</a></body></html>'
         client = _make_client({seed: (html, seed, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         assert all(p[0] != external for p in pages)
 
 
@@ -268,7 +268,7 @@ class TestCrawlUrlDeduplication:
             child: ("<html><body>About</body></html>", child, 200, False),
         }
         client = _make_client(pages_map)
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         fetched_urls = [p[0] for p in pages]
         assert fetched_urls.count(child) == 1
 
@@ -281,7 +281,7 @@ class TestCrawlUrlDeduplication:
             child: (f'<a href="{seed}">Home</a>', child, 200, False),
         }
         client = _make_client(pages_map)
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         # seed should appear exactly once
         assert [p[0] for p in pages].count(seed) == 1
 
@@ -302,7 +302,7 @@ class TestCrawlDepthReached:
             seed: (self._seed_html([child]), seed, 200, False),
             child: ("<html><body>ok</body></html>", child, 200, False),
         })
-        _, depth = crawl_url(seed, client, depth=2)
+        _, depth, _ = crawl_url(seed, client, depth=2)
         assert depth == 1
 
     def test_depth_2_when_grandchild_200(self):
@@ -314,7 +314,7 @@ class TestCrawlDepthReached:
             child: (self._seed_html([grandchild]), child, 200, False),
             grandchild: ("<html><body>ok</body></html>", grandchild, 200, False),
         })
-        _, depth = crawl_url(seed, client, depth=2)
+        _, depth, _ = crawl_url(seed, client, depth=2)
         assert depth == 2
 
     def test_child_404_does_not_advance_depth(self):
@@ -324,19 +324,19 @@ class TestCrawlDepthReached:
             seed: (self._seed_html([child]), seed, 200, False),
             child: ("", child, 404, False),
         })
-        _, depth = crawl_url(seed, client, depth=2)
+        _, depth, _ = crawl_url(seed, client, depth=2)
         assert depth == 0
 
     def test_depth_stays_0_when_seed_fails(self):
         seed = "https://example.gov/"
         client = _make_client({seed: ("", seed, 500, False)})
-        _, depth = crawl_url(seed, client, depth=2)
+        _, depth, _ = crawl_url(seed, client, depth=2)
         assert depth == 0
 
     def test_depth_stays_0_when_seed_network_error(self):
         client = MagicMock()
         client.fetch_page.side_effect = OSError("connection refused")
-        _, depth = crawl_url("https://example.gov/", client, depth=2)
+        _, depth, _ = crawl_url("https://example.gov/", client, depth=2)
         assert depth == 0
 
 
@@ -363,7 +363,7 @@ class TestRedirectDeduplication:
             return ("", url, 404, False, False)
         client.fetch_page.side_effect = fetch_side_effect
 
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         fetched = [p[0] for p in pages]
         # seed fetched once, child fetched once — final (redirect target) not re-fetched
         assert fetched.count(seed) == 1
@@ -388,7 +388,7 @@ class TestRedirectDeduplication:
             return ("", url, 404, False, False)
         client.fetch_page.side_effect = fetch_side_effect
 
-        pages, _ = crawl_url(seed, client, depth=2)
+        pages, _, _ = crawl_url(seed, client, depth=2)
         fetched = [p[0] for p in pages]
         assert other in fetched
 
@@ -413,7 +413,7 @@ class TestCrawlUrlPrefetchedSeed:
         seed = "https://example.gov/"
         client = _make_client({})
         html = "<html><body>prefetched content</body></html>"
-        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, seed, 200, False))
+        pages, _, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, seed, 200, False))
         assert pages[0][1] == html
         assert pages[0][2] == 200
 
@@ -422,7 +422,7 @@ class TestCrawlUrlPrefetchedSeed:
         child = "https://example.gov/child"
         seed_html = self._seed_html([child])
         client = _make_client({child: ("<html><body>child</body></html>", child, 200, False)})
-        pages, depth = crawl_url(seed, client, depth=1, prefetched_seed=(seed_html, seed, 200, False))
+        pages, depth, _ = crawl_url(seed, client, depth=1, prefetched_seed=(seed_html, seed, 200, False))
         urls = [p[0] for p in pages]
         assert seed in urls
         assert child in urls
@@ -432,7 +432,7 @@ class TestCrawlUrlPrefetchedSeed:
         seed = "https://example.gov/"
         child = "https://example.gov/child"
         client = _make_client({child: ("<html>child</html>", child, 200, False)})
-        pages, depth = crawl_url(seed, client, depth=1,
+        pages, depth, _ = crawl_url(seed, client, depth=1,
                                   prefetched_seed=(self._seed_html([child]), seed, 403, False))
         assert len(pages) == 1
         assert depth == 0
@@ -442,7 +442,7 @@ class TestCrawlUrlPrefetchedSeed:
         seed = "https://example.gov/"
         child = "https://example.gov/child"
         client = _make_client({child: ("<html>child</html>", child, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=0,
+        pages, _, _ = crawl_url(seed, client, depth=0,
                               prefetched_seed=(self._seed_html([child]), seed, 200, False))
         assert len(pages) == 1
         client.fetch_page.assert_not_called()
@@ -453,7 +453,7 @@ class TestCrawlUrlPrefetchedSeed:
         child = "https://example.gov/about"
         html = self._seed_html([child])
         client = _make_client({child: ("<html><body>about</body></html>", child, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, final, 200, False))
+        pages, _, _ = crawl_url(seed, client, depth=1, prefetched_seed=(html, final, 200, False))
         assert pages[0][0] == seed
         fetched_urls = [p[0] for p in pages]
         assert child in fetched_urls
@@ -463,7 +463,7 @@ class TestCrawlUrlPrefetchedSeed:
     def test_none_prefetched_seed_behaves_as_before(self):
         seed = "https://example.gov/"
         client = _make_client({seed: ("<html><body>fetched</body></html>", seed, 200, False)})
-        pages, _ = crawl_url(seed, client, depth=1, prefetched_seed=None)
+        pages, _, _ = crawl_url(seed, client, depth=1, prefetched_seed=None)
         client.fetch_page.assert_called()
         assert pages[0][2] == 200
 

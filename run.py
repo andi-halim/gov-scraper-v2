@@ -235,7 +235,7 @@ def _process_url(
         return result
 
     # Step 6: depth crawl — pass pre-fetched seed to avoid re-fetching it
-    pages, crawl_depth_reached = crawl_url(
+    pages, crawl_depth_reached, page_depths = crawl_url(
         url, http_client, depth=depth,
         prefetched_seed=(html, final_url, http_status, js_rendered),
         max_pages=max_pages,
@@ -243,7 +243,11 @@ def _process_url(
     result["crawl_depth_reached"] = crawl_depth_reached
 
     # Step 7: dataset detection
-    found, dataset_urls, dataset_formats = detect_datasets(pages, http_client)
+    found, dataset_urls, dataset_formats = detect_datasets(
+        pages, http_client,
+        effective_keywords=effective_keywords,
+        page_depths=page_depths,
+    )
     result["datasets_found"] = found
     result["dataset_urls"] = dataset_urls
     result["dataset_formats"] = dataset_formats

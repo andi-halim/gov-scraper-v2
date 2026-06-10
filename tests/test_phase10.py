@@ -383,7 +383,7 @@ class TestPortalRouting:
         client = _make_http_client()
         portal = _make_portal_detector(platform=None)
 
-        with patch("run.crawl_url", return_value=([], 0)) as mock_crawl, \
+        with patch("run.crawl_url", return_value=([], 0, {})) as mock_crawl, \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
@@ -409,7 +409,7 @@ class TestProcessUrlStandardPipeline:
         score = score or _score_result()
         crawl_pages = crawl_pages or []
 
-        with patch("run.crawl_url", return_value=(crawl_pages, crawl_depth)), \
+        with patch("run.crawl_url", return_value=(crawl_pages, crawl_depth, {})), \
              patch("run.detect_datasets", return_value=datasets), \
              patch("run.score_page", return_value=score), \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
@@ -457,7 +457,7 @@ class TestProcessUrlStandardPipeline:
     def test_js_rendered_flag_propagated(self):
         client = _make_http_client(js_rendered=True)
         portal = _make_portal_detector()
-        with patch("run.crawl_url", return_value=([], 0)), \
+        with patch("run.crawl_url", return_value=([], 0, {})), \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
@@ -472,7 +472,7 @@ class TestProcessUrlStandardPipeline:
         client = _make_http_client(html=_RICH_HTML, final_url="https://example.gov/",
                                    http_status=200, js_rendered=True)
         portal = _make_portal_detector(platform=None)
-        with patch("run.crawl_url", return_value=([], 0)) as mock_crawl, \
+        with patch("run.crawl_url", return_value=([], 0, {})) as mock_crawl, \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
@@ -486,7 +486,7 @@ class TestProcessUrlStandardPipeline:
 
     def test_priority_flag_preserved(self):
         client = _make_http_client()
-        with patch("run.crawl_url", return_value=([], 0)), \
+        with patch("run.crawl_url", return_value=([], 0, {})), \
              patch("run.detect_datasets", return_value=(False, [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):

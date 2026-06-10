@@ -309,9 +309,9 @@ class TestMakeErrorRow:
         row = ReportWriter.make_error_row("https://err.gov/", False, "timeout")
         assert row["http_status"] == 0
 
-    def test_relevance_score_is_zero(self):
+    def test_relevance_score_is_none(self):
         row = ReportWriter.make_error_row("https://err.gov/", True, "DNS failure")
-        assert row["relevance_score"] == 0
+        assert row["relevance_score"] is None
 
     def test_error_notes_contains_message(self):
         row = ReportWriter.make_error_row("https://err.gov/", False, "something went wrong")

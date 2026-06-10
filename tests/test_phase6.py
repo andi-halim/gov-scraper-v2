@@ -367,6 +367,63 @@ class TestDetectDatasetsContentDisposition:
 
 
 # ---------------------------------------------------------------------------
+# Dataset ranking
+# ---------------------------------------------------------------------------
+
+class TestDetectDatasetsRanking:
+    def test_csv_ranked_above_pdf(self):
+        html = '<a href="report.pdf">PDF</a><a href="data.csv">CSV</a>'
+        page = _page("https://example.gov/", html)
+        _, urls, _ = detect_datasets([page])
+        assert urls.index("https://example.gov/data.csv") < urls.index("https://example.gov/report.pdf")
+
+    def test_json_ranked_above_xls(self):
+        html = '<a href="old.xls">XLS</a><a href="data.json">JSON</a>'
+        page = _page("https://example.gov/", html)
+        _, urls, _ = detect_datasets([page])
+        assert urls.index("https://example.gov/data.json") < urls.index("https://example.gov/old.xls")
+
+    def test_keyword_match_in_anchor_boosts_rank(self):
+        # Two CSVs — one with Census keyword in anchor, one without
+        html = (
+            '<a href="noise.csv">Unrelated Data</a>'
+            '<a href="county.csv">County Revenue Report</a>'
+        )
+        page = _page("https://example.gov/", html)
+        keywords = frozenset(["county", "municipal", "township"])
+        _, urls, _ = detect_datasets([page], effective_keywords=keywords)
+        assert urls.index("https://example.gov/county.csv") < urls.index("https://example.gov/noise.csv")
+
+    def test_seed_depth_ranked_above_deep_page(self):
+        # seed-data.csv is found on the seed page (depth 0); deep-data.csv on a depth-2 page.
+        # Same format (csv), so depth bonus determines order.
+        seed = _page("https://example.gov/", '<a href="seed-data.csv">Seed CSV</a>')
+        depth2 = _page("https://example.gov/page2", '<a href="deep-data.csv">Deep CSV</a>')
+        depths = {"https://example.gov/": 0, "https://example.gov/page2": 2}
+        _, urls, _ = detect_datasets([depth2, seed], page_depths=depths)
+        assert urls.index("https://example.gov/seed-data.csv") < urls.index("https://example.gov/deep-data.csv")
+
+    def test_formats_reflect_returned_urls_only_when_truncated(self):
+        # 51 PDFs + 1 CSV — after truncation to 50, CSV should be in top 50 (higher tier)
+        pdfs = "".join(f'<a href="r{i}.pdf">PDF {i}</a>' for i in range(51))
+        html = f'<a href="data.csv">Data</a>{pdfs}'
+        page = _page("https://example.gov/", html)
+        _, urls, fmts = detect_datasets([page])
+        assert len(urls) == 50
+        assert "csv" in fmts  # CSV ranked above PDFs, appears in top 50
+        assert urls[0] == "https://example.gov/data.csv"
+
+    def test_no_keywords_still_ranks_by_format_and_depth(self):
+        # PDF at depth 1 (score=1+1=2) vs CSV at depth 2 (score=3+0=3).
+        # CSV wins on format tier alone despite being deeper.
+        depth1 = _page("https://example.gov/p1", '<a href="report.pdf">PDF</a>')
+        depth2 = _page("https://example.gov/p2", '<a href="data.csv">CSV</a>')
+        depths = {"https://example.gov/p1": 1, "https://example.gov/p2": 2}
+        _, urls, _ = detect_datasets([depth1, depth2], page_depths=depths, effective_keywords=None)
+        assert urls.index("https://example.gov/data.csv") < urls.index("https://example.gov/report.pdf")
+
+
+# ---------------------------------------------------------------------------
 # HttpClient.head() (T-61)
 # ---------------------------------------------------------------------------
 

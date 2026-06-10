@@ -129,9 +129,10 @@ Scan all pages visited during the crawl (up to depth 2) for links to downloadabl
   - Link `href` ends with a detected extension.
   - Link `href` contains a detected extension before a query string (e.g., `download.php?file=data.csv`).
   - HTTP `Content-Disposition: attachment` header on a followed link.
-- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated, capped at 50 entries), `dataset_formats` (pipe-separated, deduplicated).
+- **Ranking:** all candidates are scored before the cap is applied. Score = format tier (CSV/JSON/XLSX=3, XLS/XML=2, PDF/unknown=1) + Census keyword match in link anchor text (+2) + crawl depth proximity (seed page=+2, depth-1=+1, depth-2=+0). Candidates are sorted descending so the cap retains the most relevant URLs.
+- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated, top-50 by score), `dataset_formats` (pipe-separated, deduplicated, reflecting only formats present in the returned URLs).
 - PDF links are included in `dataset_urls` with format `pdf`; they are not combined with machine-readable format flags.
-- If more than 50 dataset URLs are detected, the list is truncated to the first 50 and a warning is logged.
+- If more than 50 dataset URLs are detected, the lowest-scoring URLs are dropped and a warning is logged.
 
 ### FR-9: Priority URL Handling
 
@@ -411,7 +412,7 @@ Platform-specific adapter enumeration (paginating the dataset catalog via API an
 | `robots_allowed` | boolean | `true` if crawl was permitted by robots.txt; `null` if unavailable |
 | `robots_status` | string | `allowed`, `disallowed`, or `unavailable` |
 | `js_rendered` | boolean | `true` if Playwright was used to render the page |
-| `relevance_score` | integer | 0–100 Census relevance score; null (empty cell) for detected portals and CDN-blocked URLs |
+| `relevance_score` | integer | 0–100 Census relevance score; null for detected portals, CDN-blocked URLs, and network errors (cases where scoring was impossible) |
 | `matched_keywords` | string | Pipe-separated list of matched keywords |
 | `datasets_found` | boolean | `true` if at least one downloadable file was detected |
 | `dataset_urls` | string | Pipe-separated list of detected dataset URLs (capped at 50) |
