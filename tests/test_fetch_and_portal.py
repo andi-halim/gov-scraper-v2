@@ -410,7 +410,7 @@ class TestPortalDetectorActiveProbe:
         def probe_side_effect(url):
             if "/api/catalog/v1" in url:
                 return make_json_response(200, {"results": []})
-            if "/api/3/action/site_read" in url:
+            if "/api/3/action/status_show" in url:
                 return make_json_response(200, {"success": True})
             return make_response(404)
         mock_client.get.side_effect = probe_side_effect

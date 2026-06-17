@@ -1,7 +1,6 @@
 import re
 import time
 import logging
-import unicodedata
 
 import httpx
 from bs4 import BeautifulSoup

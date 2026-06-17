@@ -259,3 +259,29 @@ The earlier curated 9-URL run was the wrong approach. Rebuilt `output/2026-06-16
 
 Streamlit (AppTest) against migrated data: Explorer "247 of 379 rows shown" (Active filter), Map ok,
 companion loader maps 171 seeds → 6,352 URLs. No exceptions.
+
+## 2026-06-17 — Doc-drift reconciliation
+Reconciled docs/spec to current code: state_definitions complete (51/51), portals adapters retired (detection-only), CKAN probe endpoint = status_show, Streamlit Map page documented. Edited CLAUDE.md, PRD.md, README.md, NOTES.md, TASKS.md, tests/test_phase4.py.
+
+$ python -m pytest tests/ -q
+384 passed, 13 skipped in 1.37s
+
+## 2026-06-17 — Renamed test files to feature-based names
+Renamed via `git mv` (1:1, no content changes). Earlier dated entries above keep the
+old `test_phase#` names as a historical record of what was run; current names are:
+
+| Old | New |
+|---|---|
+| test_phase2.py  | test_http_and_robots.py |
+| test_phase4.py  | test_fetch_and_portal.py |
+| test_phase5.py  | test_crawler.py |
+| test_phase6.py  | test_dataset_detector.py |
+| test_phase7.py  | test_scorer.py |
+| test_phase8.py  | test_url_ingestion.py |
+| test_phase9.py  | test_report_writer.py |
+| test_phase10.py | test_run.py |
+
+(test_phase3.py was already deleted with the StateTagger removal; test_integration_urls.py unchanged.)
+
+$ python -m pytest tests/ -q
+384 passed, 13 skipped

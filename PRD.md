@@ -178,7 +178,7 @@ Issue a single GET to the platform's canonical status or catalog endpoint:
 | Platform | Probe URL | Success condition |
 |---|---|---|
 | Socrata | `{base_url}/api/catalog/v1?limit=1` | HTTP 200 + JSON body contains `"results"` array |
-| CKAN | `{base_url}/api/3/action/site_read` | HTTP 200 + JSON body contains `"success": true` |
+| CKAN | `{base_url}/api/3/action/status_show` | HTTP 200 + JSON body contains `"success": true` |
 | ArcGIS Hub | `{base_url}/api/v3/datasets?page[size]=1` | HTTP 200 + JSON body contains `"data"` array |
 
 If passive signals point to multiple platforms (rare), the active API probe result takes precedence.
@@ -371,8 +371,15 @@ gov-scraper-v2/
   setup/
     generate_state_definitions.py
   tests/
-    test_phase2.py … test_phase10.py  # test_phase3.py removed (StateTagger deleted)
-    test_integration_urls.py          # skipped by default; set RUN_INTEGRATION_TESTS=1
+    test_http_and_robots.py    # HttpClient + RobotsChecker
+    test_fetch_and_portal.py   # fetch_page / JS detection / bot-bypass + PortalDetector
+    test_crawler.py            # BFS depth crawler (crawl_url)
+    test_dataset_detector.py   # downloadable-file detection
+    test_scorer.py             # keyword loader + relevance scorer
+    test_url_ingestion.py      # load_urls + priority queue
+    test_report_writer.py      # ReportWriter + run modes
+    test_run.py                # run.py entrypoint / pipeline wiring
+    test_integration_urls.py   # skipped by default; set RUN_INTEGRATION_TESTS=1
   output/                         # gitignored
   page_result.py                  # PageResult NamedTuple shared across packages
   utils.py                        # normalize_text() shared text helper
@@ -553,3 +560,18 @@ Accepts a URL and crawl parameters, runs the full pipeline in-process, and optio
 **Result display:** Four metric tiles (Active, HTTP Status, Score, Crawl Depth), a "Matched keywords" expander (open by default, still collapsible) rendering `matched_keywords` as colored badge chips (same component as the Explorer drill-down), `dataset_urls` clickable link table, `error_notes` warning banner, and `portal_platform` info banner.
 
 **Save:** "Add to most recent results.csv" appends the result row using `ReportWriter(resume=True)`. The button disables after a successful write to prevent duplicate rows.
+
+### Page 3 — Map
+
+Renders a Plotly `USA-states` choropleth (`page_map()`) that aggregates the most recent `results.csv` by state. `NATIONAL` rows are excluded from the map (a caption reports how many were excluded).
+
+**Sidebar controls:**
+
+| Control | Type | Behavior |
+|---|---|---|
+| Keyword filter | Multiselect | Same options as the Explorer keyword search (`keywords.csv` + all `state_definitions.json` census terms); OR logic against `matched_keywords`. Only URLs matching ANY selected term count toward per-state stats. |
+| Color states by | Selectbox | Choose the metric mapped to color intensity: `Active URLs with datasets` (default), `Avg relevance score`, or `Total active URLs`. |
+
+**Per-state aggregates** (hover tooltip + collapsible summary table): active URLs with datasets, total active URLs, total URLs, whether any priority URL is present (and the count), and average relevance score (null scores excluded from the mean). The summary table sorts by active-URLs-with-datasets descending.
+
+Requires `plotly>=5.0.0` in addition to `streamlit` and `pandas`.

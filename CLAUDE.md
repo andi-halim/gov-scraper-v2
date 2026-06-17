@@ -61,7 +61,7 @@ The script sleeps 10 seconds between every request and retries up to 3 times on 
 
 **When `--states` is provided**, the script processes exactly those states with no request cap — useful for retrying a specific failed state (e.g. `--states AK`) or overriding the auto-detect order. Results are always merged into the existing file.
 
-`config/state_definitions.json` has already been partially generated. Re-run the script on successive days until all 51 states are complete. Re-run from scratch only when a new ISD edition is published (approximately every 5 years).
+`config/state_definitions.json` is fully generated — all 51 states/DC have non-empty `census_terms` — and is committed to the repo. Most developers never need to run the setup script. Re-run it only to regenerate from scratch when a new ISD edition is published (approximately every 5 years).
 
 ---
 
@@ -95,11 +95,13 @@ Integration tests hit four live URLs (census.gov, data.cityofchicago.org, catalo
 streamlit run app.py
 ```
 
-`app.py` provides a two-page browser interface to explore and extend pipeline results without using the terminal. Requires `streamlit>=1.35.0` and `pandas>=2.0.0` (both in `requirements.txt`).
+`app.py` provides a three-page browser interface (Explorer, Scraper, Map) to explore and extend pipeline results without using the terminal. Requires `streamlit>=1.35.0`, `pandas>=2.0.0`, and `plotly>=5.0.0` (all in `requirements.txt`).
 
 **Page 1 — Explorer:** Loads the most recently dated `output/<YYYY-MM-DD>/results.csv` into an interactive table. Sidebar filters: state (multiselect), status radio (`Active` / `All` / `Inactive` / `Errors & blocked`, default `Active`), a "null scores only" toggle that disables the score slider, relevance score range slider, keyword search (multiselect against `matched_keywords`, options drawn from `keywords.csv` + `state_definitions.json` census terms, same widget pattern as the Map tab), and portal platform multiselect. Default sort is descending score then descending dataset count. Selecting a row opens a drill-down panel with four metric tiles, an expander (`expanded=True` by default, still collapsible) showing matched keywords as a wrapping row of colored `st.badge` chips (`_render_keyword_chips()`), and the **complete** `dataset_urls` list as a clickable link table — loaded from the companion `dataset_urls.csv` via `_load_companion_datasets()` (falling back to the char-capped `results.csv` cell for older runs without a companion file).
 
 **Page 2 — Scraper:** Accepts a URL, state, priority flag, crawl depth, and max-pages cap. Calls `run._process_url()` directly (no subprocess) and streams live log output from the `run`, `crawler`, and `scorer` loggers via a `st.status` container. Results display as metric tiles, the same auto-expanded matched-keywords badge-chip expander, and a dataset URL table. A "Add to most recent results.csv" button appends the row using `ReportWriter` in resume mode and disables after a successful write.
+
+**Page 3 — Map:** Renders a Plotly USA-states choropleth (`page_map()`) aggregating the most recent `results.csv` per state. `NATIONAL` rows are excluded. Sidebar controls: a keyword multiselect (same widget/options as the Explorer keyword search — `keywords.csv` + `state_definitions.json` census terms, OR logic against `matched_keywords`) and a "Color states by" selector with three metrics — Active URLs with datasets, Avg relevance score, or Total active URLs. Hovering a state shows per-state counts; a collapsible summary table below the map lists the same aggregates.
 
 ---
 

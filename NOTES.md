@@ -7,7 +7,7 @@
 | 2 | `crawler/http_client.py`, `crawler/robots.py` | Done |
 | 3 | State tagging via `STATE` column in `urls.csv` (replaces auto-detection; `crawler/state_tagger.py` removed) | Done |
 | 4 | Page fetcher + JS detection + CDN bot-bypass + `crawler/playwright_client.py` | Done |
-| 4B | Open data portal detection (`crawler/portal_detector.py`, `portals/`) | Done |
+| 4B | Open data portal detection (`crawler/portal_detector.py`) | Done (detection only; `portals/` adapters retired — see note at end) |
 | 5 | Depth crawler with `prefetched_seed` optimisation (`crawler/orchestrator.py`) | Done |
 | 6 | Dataset detector (`crawler/dataset_detector.py`) | Done |
 | 7 | Relevance scorer (`scorer/keyword_loader.py`, `scorer/scorer.py`) | Done |
@@ -15,7 +15,7 @@
 | 9 | Output writer + run modes (`reporter/writer.py`) | Done |
 | 10 | `run.py` entrypoint | Done |
 
-**Current state:** all phases complete. The full pipeline is wired in `run.py` and the test suite passes (392 unit tests, 18 integration tests skipped by default). Remaining open items are Phase 11 validation tasks T-110 and T-117 — T-110 requires completing the ISD setup script for all 51 states; T-117 requires a live integration run against known portal URLs.
+**Current state:** all phases complete. The full pipeline is wired in `run.py` and the test suite passes (integration tests skipped by default). T-110 is done — `config/state_definitions.json` now has non-empty `census_terms` for all 51 states/DC. The one remaining open item is Phase 11 task T-117, a live integration run against known portal URLs.
 
 ### Phase 2 implementation notes
 
@@ -201,7 +201,7 @@
 ### New files
 - **`page_result.py`** — `PageResult` NamedTuple replacing the bare `tuple[str, str, int, bool]` alias. Named `page_result.py` instead of `types.py` to avoid shadowing Python's stdlib `types` module (which is already in `sys.modules` when pytest runs).
 - **`run.py`** — Full CLI entrypoint wiring all pipeline components together.
-- **`tests/test_phase10.py`** — 60 unit tests covering T-49, T-93, T-94, T-100–T-103.
+- **`tests/test_run.py`** (formerly `test_phase10.py`) — 60 unit tests covering T-49, T-93, T-94, T-100–T-103.
 
 ### Modified files
 - **`crawler/http_client.py`** — Added `self.last_response_headers: dict = {}`, populated in `fetch_page()` so `run.py` can pass response headers to `PortalDetector.detect()` without changing the existing 4-value return signature.
@@ -215,7 +215,7 @@
 The task note said "in `crawler/orchestrator.py`" but the T-102 main loop already handles this routing inline. Putting routing in `orchestrator.py` would create coupling between the crawler and the portal adapters/scorer — keeping it in `run.py` keeps each layer clean.
 
 **`last_response_headers` side-channel instead of changing `fetch_page()` return**
-Changing `fetch_page()` from 4 to 5 return values would break all 30+ existing mock sites in `test_phase4.py` and `test_phase5.py`. Storing headers on `self` avoids those changes while still giving `run.py` header access for portal detection.
+Changing `fetch_page()` from 4 to 5 return values would break all 30+ existing mock sites in `test_fetch_and_portal.py` and `test_crawler.py` (formerly `test_phase4.py` and `test_phase5.py`). Storing headers on `self` avoids those changes while still giving `run.py` header access for portal detection.
 
 **State tagging before portal detection**
 T-102 listed state tagging as step 6 (after portal detection), but the portal adapter needs `effective_keywords` which requires state. Tagging happens in step 4 now — this is a necessary reorder.
@@ -290,3 +290,11 @@ python run.py --input /tmp/test_urls.csv --depth 1 --delay 1.0 --output /tmp/gov
 ## Note: `FEDERAL` state tag retired
 
 The `FEDERAL` state tag referenced earlier in these notes (`FEDERAL_DOMAINS`, the federal domain list, `TestPriority5Federal`, etc.) has been retired. Federal agency URLs are now tagged `NATIONAL`, the same as any other non-state-specific URL. This entry is left in place for historical accuracy; the notes above are not edited.
+
+---
+
+## Note: portal adapters retired (detection only)
+
+The `portals/` package and its API-enumeration adapters (`SocrataAdapter`, `CKANAdapter`, `ArcGISHubAdapter`) described in the Phase 4B notes above (T-45–T-48) have been **removed from the project**. Open data portal handling is now **detection only**: `crawler/portal_detector.py` identifies the platform via passive signals + an active API probe, then `run.py` records `portal_platform`, sets `relevance_score` to null, and skips the depth crawl and scorer. There is no catalog enumeration, and the `portal_dataset_count` / `portal_relevant_count` / `top_dataset_urls` output columns referenced in the historical Phase 4B and Phase 10 notes do not exist in `reporter/writer.py`. Adapter enumeration is documented as future work in PRD §12. The Phase 4B notes above are left in place for historical accuracy and are not edited.
+
+The active CKAN probe endpoint is `/api/3/action/status_show` (the earlier `site_read` reference is superseded); both return the standard `{"success": true, ...}` envelope used as the probe's success condition.

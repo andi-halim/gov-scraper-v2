@@ -73,6 +73,8 @@ The unit test suite currently covers 382 tests across all pipeline phases.
 
 `output/<YYYY-MM-DD>/results.csv` — one row per input URL.
 
+A companion file, `output/<YYYY-MM-DD>/dataset_urls.csv`, holds the **complete** ranked set of detected dataset URLs (one row per URL: `url, dataset_url, format, rank`), keyed back to `results.csv` by `url`. The `dataset_urls` cell in `results.csv` is a char-capped convenience subset; the companion is the authoritative full list.
+
 | Column | Description |
 |---|---|
 | `url` | Seed URL from `config/urls.csv` |
@@ -84,16 +86,15 @@ The unit test suite currently covers 382 tests across all pipeline phases.
 | `robots_allowed` | `true/false/null` (null if robots.txt was unreachable) |
 | `robots_status` | `allowed`, `disallowed`, or `unavailable` |
 | `js_rendered` | `true` if Playwright was used to render the page |
-| `relevance_score` | 0–100 Census relevance score |
+| `relevance_score` | 0–100 Census relevance score; null for detected portals, CDN-blocked URLs, and network errors (cases where scoring was impossible) |
 | `matched_keywords` | Pipe-separated list of matched keywords |
 | `datasets_found` | `true` if at least one downloadable file was detected |
-| `dataset_urls` | Pipe-separated list of detected dataset URLs |
+| `dataset_urls` | Pipe-separated list of detected dataset URLs, ranked, char-capped at 32,000 chars for spreadsheet safety. The complete list lives in the companion `dataset_urls.csv` |
 | `dataset_formats` | Pipe-separated deduplicated format list (e.g. `csv\|xlsx\|pdf`) |
+| `dataset_urls_total` | Count of all detected dataset URLs (= rows for this `url` in the companion CSV) |
+| `dataset_urls_omitted` | Count of URLs dropped from the `dataset_urls` cell to stay under the char budget; `0` when all fit. Omitted URLs are still in the companion CSV |
 | `crawl_depth_reached` | Deepest hop level successfully crawled (0–2) |
 | `portal_platform` | `Socrata`, `CKAN`, `ArcGIS Hub`, or empty |
-| `portal_dataset_count` | Total datasets enumerated via portal API |
-| `portal_relevant_count` | Datasets with relevance score > 0 |
-| `top_dataset_urls` | Pipe-separated list of up to 10 dataset URLs sorted by score |
 | `error_notes` | Error description, empty if none |
 
 ---
@@ -135,10 +136,6 @@ gov-scraper-v2/
     portal_detector.py # Open data portal identification (Socrata, CKAN, ArcGIS Hub)
     playwright_client.py  # Headless Chromium renderer
     dataset_detector.py   # Downloadable file link scanner
-  portals/
-    socrata.py         # Socrata / Tyler Technologies API adapter
-    ckan.py            # CKAN API adapter
-    arcgis_hub.py      # ArcGIS Hub API adapter
   scorer/
     keyword_loader.py  # Loads and merges keyword sets per state
     scorer.py          # Weighted keyword relevance scorer
@@ -177,7 +174,7 @@ URL and domain text are excluded from scoring.
 
 ## Open Data Portal Support
 
-The crawler detects Socrata, CKAN, and ArcGIS Hub portals automatically. When detected, it uses each platform's catalog API to enumerate all datasets (instead of crawling rendered pages), scores each dataset's metadata, and reports aggregate counts and top dataset URLs.
+The crawler detects Socrata, CKAN, and ArcGIS Hub portals automatically using a two-pass strategy: passive HTML/header signals first (zero extra requests), then a single active API probe only when the passive pass is inconclusive. When a portal is detected, `portal_platform` is recorded, `relevance_score` is set to null, and the depth crawl and scorer are skipped. Portal *enumeration* (paginating each platform's catalog API to score individual dataset metadata) is scoped out as future work — see PRD §12.
 
 ---
 

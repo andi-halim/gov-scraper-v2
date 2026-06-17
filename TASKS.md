@@ -222,7 +222,7 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 
 > Manual and scripted checks that the pipeline produces correct output before handing off.
 
-- [ ] **T-110** Run the setup script against `config/2022ISD.pdf` with either backend; verify `config/state_definitions.json` contains entries for all 50 states + DC with non-empty `census_terms`
+- [x] **T-110** Run the setup script against `config/2022ISD.pdf` with either backend; verify `config/state_definitions.json` contains entries for all 50 states + DC with non-empty `census_terms`. Complete — all 51 states/DC present with non-empty `census_terms`; the file is committed.
 - [x] **T-111** Smoke test: run `python run.py --input config/urls.csv --depth 1` against a 5-URL subset; verify `output/<date>/results.csv` has correct columns and one row per URL. Extended: full run of 248 URLs (26 complete states + FEDERAL + NATIONAL) executed 2026-06-03 — see NOTES.md Phase 11 section
 - [x] **T-112** Verify state tagging: confirm a `*.state.tx.us` URL → `TX`, a `sco.ca.gov` URL → `CA`, a `census.gov` URL → `FEDERAL`, and an untaggable URL → `NATIONAL`
 - [x] **T-113** Verify scorer: a page with Census keywords in its `<h1>` should score higher than an identical page with keywords only in body text
@@ -263,3 +263,9 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 ## Note: `FEDERAL` state tag retired
 
 The `FEDERAL` state tag referenced throughout this historical task log (Phase 3 `StateTagger`, T-32, T-70, T-111, T-112, and the output column reference) has been retired. Federal agency URLs are now tagged `NATIONAL`, the same as any other non-state-specific URL. This entry is left in place for historical accuracy; the task descriptions above are not edited.
+
+---
+
+## Note: portal adapters retired (detection only)
+
+Tasks T-45–T-48 (the `portals/` package and the Socrata/CKAN/ArcGIS Hub API-enumeration adapters) have been removed from the project. Open data portal handling is now **detection only** via `crawler/portal_detector.py` (T-43/T-44) and the routing in T-49: the platform is identified, `portal_platform` is recorded, `relevance_score` is set to null, and the depth crawl and scorer are skipped — there is no catalog enumeration. Consequently the `portal_dataset_count`, `portal_relevant_count`, and `top_dataset_urls` columns in the output column reference above **do not exist** in `reporter/writer.py`; T-117 verifies detection (correct `portal_platform`), not dataset counts. The active CKAN probe endpoint is `/api/3/action/status_show`. Adapter enumeration is documented as future work in PRD §12. The task descriptions above are left in place for historical accuracy and are not edited.
