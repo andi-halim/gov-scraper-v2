@@ -150,3 +150,112 @@ Smoke test re-run (`/tmp/cdn_test_urls.csv`, depth=1, delay=1s):
 | https://floridajobs.org/... | false | false | 0 | Azure WAF detected, Playwright tried but couldn't break through |
 
 Double-fetch confirmed fixed: michigan.gov now shows ONE httpx request (was two).
+
+---
+
+## Note: `FEDERAL` state tag retired
+
+The `FEDERAL` tag referenced in the sample output row earlier in this log has been retired. Federal agency URLs are now tagged `NATIONAL`, the same as any other non-state-specific URL. This entry is left in place for historical accuracy; the log above is not edited.
+
+---
+
+## 2026-06-16
+
+### Unbounded dataset URLs via normalized companion CSV
+
+Replaced the fixed 50-URL cap with: (1) the full ranked list written one-row-per-URL to a
+normalized companion `output/<date>/dataset_urls.csv` (`url, dataset_url, format, rank`), and
+(2) a char-cap on the `results.csv` `dataset_urls` cell at 32,000 chars (Excel-safe), with new
+`dataset_urls_total` / `dataset_urls_omitted` columns.
+
+```bash
+python -m pytest tests/ -q --ignore=tests/test_integration_urls.py
+```
+**Result:** 382 passed in 1.24s (cap test rewritten as uncapped; +6 companion tests, no regressions)
+
+```bash
+python -m py_compile app.py run.py reporter/writer.py crawler/dataset_detector.py
+python -c "import run, reporter.writer, crawler.dataset_detector"
+```
+**Result:** compile OK; import OK (no circular import from writer.py → dataset_detector.format_for_url)
+
+End-to-end smoke test (1000 synthetic dataset URLs, forcing the cell cap):
+
+| metric | value |
+|---|---|
+| total detected | 1000 |
+| kept in results.csv cell | 820 (31,979 chars ≤ 32,000) |
+| omitted from cell | 180 |
+| rows in companion dataset_urls.csv | 1000 (all preserved) |
+
+Confirmed: `results.csv` cell stays under both the 32,767-char spreadsheet limit and the
+131,072-byte Python csv-reader field limit (so `--resume`/`--new-only` reads never raise);
+the companion CSV retains every URL.
+
+### Per-URL format preserved + real-URL verification
+
+Changed `detect_datasets()` to return a 4th value `dataset_links` (list of `(url, format)`),
+so the companion CSV records the exact detected format — including formats resolved only via a
+Content-Disposition HEAD probe (not recoverable from the URL). Removed the interim
+`format_for_url()` URL-extension fallback.
+
+```bash
+python -m pytest tests/ -q --ignore=tests/test_integration_urls.py
+```
+**Result:** 384 passed (test_phase6 unpacks updated to 4-tuple; test_phase10 dataset mocks → 4-tuple; +2 companion format tests)
+
+Real-URL end-to-end (live Census crawl, depth=1):
+
+```bash
+python run.py --input /tmp/real_ds_test2.csv --output /tmp/real_ds_out2 --depth 1 --delay 1 --max-pages 8
+```
+- 2 seed URLs → companion `dataset_urls.csv` with 12 rows; formats `{xlsx, pdf}`; one row per detected URL.
+- Integrity: companion row count per seed == `dataset_urls_total` for every row (ALL CONSISTENT).
+
+Real omission path (live crawl of census.gov/programs-surveys/cog.html, cell budget patched to 180 chars):
+
+| metric | value |
+|---|---|
+| dataset_urls_total | 6 |
+| kept in results.csv cell | 2 |
+| dataset_urls_omitted | 4 |
+| companion rows (all preserved) | 6 (formats xlsx, pdf, ranked) |
+
+Confirmed `kept + omitted == total == companion count`; omitted URLs live only in the companion.
+Note: raw single-page httpx fetches under-detect vs. the pipeline because seed pages are JS-rendered
+via Playwright during the real crawl. The HEAD-probe format path is covered by unit tests
+(test_phase6 `test_head_probe_format_preserved_in_dataset_links`, test_phase9 companion tests).
+
+### Streamlit verification against new output/2026-06-16/
+
+Built a curated real-URL run (9 seeds) to exercise the new companion infrastructure:
+
+```bash
+python run.py --input /tmp/streamlit_test_urls.csv --output output/2026-06-16 --depth 1 --delay 1 --max-pages 12
+```
+- 3 portals detected (Socrata ×2, ArcGIS Hub → score null), 1 inactive (AK), 5 dataset-bearing seeds.
+- Companion `dataset_urls.csv`: 61 rows; formats `{pdf:31, xlsx:20, csv:8, json:2}`.
+
+Streamlit checks (Streamlit 1.58):
+- Headless server boots clean: `GET /_stcore/health` → ok, `GET /` → HTTP 200, no tracebacks in log.
+- `AppTest` renders Explorer / Map / Scraper with zero exceptions; Explorer shows "8 of 9 rows shown" (Active filter hides inactive AK).
+- Added `if __name__ == "__main__":` guard around `app._main()` so the module is importable for tests (streamlit run still sets __name__=="__main__").
+- Direct loader checks: `_load_companion_datasets(output/2026-06-16)` maps 5 seeds → 61 URLs (== file rows), rank order preserved; `_result_dataset_str` prefers `dataset_links` tuples and falls back to the capped cell; missing-companion older run (2026-06-10) → `{}` (graceful fallback).
+
+Run locally with: `streamlit run app.py` (loads the most recent dated dir = 2026-06-16).
+
+### Correction: 2026-06-16 rebuilt as a format migration of 2026-06-10
+
+The earlier curated 9-URL run was the wrong approach. Rebuilt `output/2026-06-16/` by transforming
+**every** record from `output/2026-06-10/results.csv` (379 rows) into the new format via the real
+`ReportWriter` — no re-crawl, pure format migration:
+
+- results.csv: all 379 records preserved in order; all original columns byte-identical; added
+  `dataset_urls_total` / `dataset_urls_omitted`; `dataset_urls` cell char-capped (none exceeded 32k).
+- Companion `dataset_urls.csv`: 6,352 rows (one per dataset URL), rank contiguous per seed, totals
+  consistent with originals. Formats `{pdf:5323, xlsx:644, xls:134, csv:99, xml:64, json:4, blank:84}`.
+  The 84 blanks are URLs whose format originally came from a Content-Disposition HEAD probe (no
+  extension in the URL) — not recoverable retroactively from a results.csv migration.
+
+Streamlit (AppTest) against migrated data: Explorer "247 of 379 rows shown" (Active filter), Map ok,
+companion loader maps 171 seeds → 6,352 URLs. No exceptions.

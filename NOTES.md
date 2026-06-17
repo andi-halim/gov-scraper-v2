@@ -285,3 +285,8 @@ python run.py --input /tmp/test_urls.csv --depth 1 --delay 1.0 --output /tmp/gov
 | T-102: Main loop connecting all components | ✅ Done |
 | T-103: Python logging setup | ✅ Done |
 | Phase 10 note: PageResult NamedTuple upgrade | ✅ Done (in `page_result.py`) |
+---
+
+## Note: `FEDERAL` state tag retired
+
+The `FEDERAL` state tag referenced earlier in these notes (`FEDERAL_DOMAINS`, the federal domain list, `TestPriority5Federal`, etc.) has been retired. Federal agency URLs are now tagged `NATIONAL`, the same as any other non-state-specific URL. This entry is left in place for historical accuracy; the notes above are not edited.

@@ -9,8 +9,15 @@ COLUMNS = [
     "url", "priority", "state", "active", "http_status", "final_url",
     "robots_allowed", "robots_status", "js_rendered", "relevance_score",
     "matched_keywords", "datasets_found", "dataset_urls", "dataset_formats",
+    "dataset_urls_total", "dataset_urls_omitted",
     "crawl_depth_reached", "portal_platform", "error_notes",
 ]
+
+# Normalized companion table: one row per detected dataset URL (the complete,
+# uncapped set). results.csv keeps a char-capped `dataset_urls` cell; this file holds
+# everything, keyed back to results.csv by `url`. One URL per row → no cell-size limit.
+COMPANION_FILENAME = "dataset_urls.csv"
+COMPANION_COLUMNS = ["url", "dataset_url", "format", "rank"]
 
 
 class ReportWriter:
@@ -34,8 +41,11 @@ class ReportWriter:
     def __init__(self, output_dir: "Path | str"):
         self.output_dir = Path(output_dir)
         self.csv_path = self.output_dir / "results.csv"
+        self.companion_path = self.output_dir / COMPANION_FILENAME
         self._fh = None
         self._writer = None
+        self._companion_fh = None
+        self._companion_writer = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -78,20 +88,72 @@ class ReportWriter:
                 self._fh, fieldnames=COLUMNS, extrasaction="ignore"
             )
 
+        self._open_companion(resume=resume)
         return seen
 
+    def _open_companion(self, resume: bool) -> None:
+        """Open the normalized companion CSV in the same mode as the main file.
+
+        Fresh run (or resume with no existing companion): write the header.
+        Resume with an existing companion: append, no header.
+        """
+        if resume and self.companion_path.exists():
+            self._companion_fh = self.companion_path.open("a", newline="", encoding="utf-8")
+            self._companion_writer = csv.DictWriter(
+                self._companion_fh, fieldnames=COMPANION_COLUMNS, extrasaction="ignore"
+            )
+        else:
+            self._companion_fh = self.companion_path.open("w", newline="", encoding="utf-8")
+            self._companion_writer = csv.DictWriter(
+                self._companion_fh, fieldnames=COMPANION_COLUMNS, extrasaction="ignore"
+            )
+            self._companion_writer.writeheader()
+            self._companion_fh.flush()
+
     def append_row(self, result: dict) -> None:
-        """Serialize result dict to one CSV row and flush immediately."""
+        """Serialize result dict to one CSV row, then expand its full dataset list.
+
+        The main results.csv row is written and flushed first (preserving crash-safe
+        resume semantics keyed on results.csv), then every URL in `dataset_urls_all`
+        is appended to the companion CSV.
+        """
         if self._writer is None:
             raise RuntimeError("Call open() before append_row()")
         self._writer.writerow(_serialize(result))
         self._fh.flush()
+        self._append_companion_rows(result)
+
+    def _append_companion_rows(self, result: dict) -> None:
+        """Write one companion row per detected dataset URL for this result.
+
+        `dataset_links` is the full ranked list of (url, format) tuples from
+        detect_datasets(); `format` carries the per-URL format, including formats
+        resolved only via a Content-Disposition HEAD probe (blank when unknown).
+        """
+        if self._companion_writer is None:
+            return
+        seed_url = result.get("url", "")
+        dataset_links = result.get("dataset_links") or []
+        if not dataset_links:
+            return
+        for rank, (dataset_url, fmt) in enumerate(dataset_links, start=1):
+            self._companion_writer.writerow({
+                "url": seed_url,
+                "dataset_url": dataset_url,
+                "format": fmt,
+                "rank": rank,
+            })
+        self._companion_fh.flush()
 
     def close(self) -> None:
         if self._fh is not None:
             self._fh.close()
             self._fh = None
             self._writer = None
+        if self._companion_fh is not None:
+            self._companion_fh.close()
+            self._companion_fh = None
+            self._companion_writer = None
 
     def __enter__(self):
         return self
@@ -157,6 +219,9 @@ class ReportWriter:
             "datasets_found": False,
             "dataset_urls": [],
             "dataset_formats": [],
+            "dataset_urls_total": 0,
+            "dataset_urls_omitted": 0,
+            "dataset_links": [],
             "crawl_depth_reached": 0,
             "portal_platform": "",
             "error_notes": error,

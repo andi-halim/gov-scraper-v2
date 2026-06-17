@@ -14,7 +14,7 @@ def _load_keywords(path: Path) -> frozenset[str]:
     with open(path, newline="", encoding="utf-8") as f:
         for row in csv.reader(f):
             if row:
-                kw = row[0].strip()
+                kw = row[0].strip().lower()
                 if kw:
                     keywords.add(kw)
     return frozenset(keywords)
@@ -50,14 +50,14 @@ def base_keyword_count() -> int:
 def get_effective_keywords(state: str) -> frozenset[str]:
     """Return the effective keyword set for a given state tag.
 
-    FEDERAL and NATIONAL use the base keyword set only.
+    NATIONAL (including federal agency URLs) uses the base keyword set only.
     All other states get base keywords unioned with state-specific census_terms.
     """
     base = _base_keywords()
     if state == "NATIONAL":
         return base
     terms = frozenset(
-        t.strip()
+        t.strip().lower()
         for t in _state_defs().get(state, {}).get("census_terms", [])
         if t.strip()
     )

@@ -20,6 +20,31 @@ logger = logging.getLogger(__name__)
 _DEFAULT_INPUT = "config/urls.csv"
 _DEFAULT_OUTPUT_ROOT = "output"
 
+# Character budget for the results.csv `dataset_urls` cell. Kept under the Excel /
+# Google Sheets 32,767-char cell limit (with headroom) so the CSV stays spreadsheet-safe.
+# The complete, uncapped list is always written to the companion dataset_urls.csv.
+_DATASET_CELL_CHAR_BUDGET = 32000
+
+
+def _cap_urls_by_chars(
+    urls: list[str], budget: int = _DATASET_CELL_CHAR_BUDGET
+) -> tuple[list[str], int]:
+    """Keep ranked URLs in order until the pipe-joined string would exceed `budget`.
+
+    Returns (kept_urls, omitted_count). `omitted_count` is how many ranked URLs were
+    dropped from the cell to stay under the budget — they remain in the companion CSV.
+    Deterministic: input order is the relevance ranking from detect_datasets().
+    """
+    kept: list[str] = []
+    length = 0
+    for url in urls:
+        addition = len(url) + (1 if kept else 0)  # +1 for the '|' separator
+        if length + addition > budget:
+            break
+        kept.append(url)
+        length += addition
+    return kept, len(urls) - len(kept)
+
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -182,6 +207,9 @@ def _process_url(
         "datasets_found": False,
         "dataset_urls": [],
         "dataset_formats": [],
+        "dataset_urls_total": 0,
+        "dataset_urls_omitted": 0,
+        "dataset_links": [],
         "crawl_depth_reached": 0,
         "portal_platform": "",
         "error_notes": "",
@@ -242,15 +270,21 @@ def _process_url(
     )
     result["crawl_depth_reached"] = crawl_depth_reached
 
-    # Step 7: dataset detection
-    found, dataset_urls, dataset_formats = detect_datasets(
+    # Step 7: dataset detection. detect_datasets() returns the full ranked list; the
+    # results.csv cell is char-capped for spreadsheet safety while the complete list is
+    # carried in `dataset_urls_all` for the writer to expand into the companion CSV.
+    found, dataset_urls, dataset_formats, dataset_links = detect_datasets(
         pages, http_client,
         effective_keywords=effective_keywords,
         page_depths=page_depths,
     )
+    cell_urls, omitted = _cap_urls_by_chars(dataset_urls)
     result["datasets_found"] = found
-    result["dataset_urls"] = dataset_urls
+    result["dataset_urls"] = cell_urls
     result["dataset_formats"] = dataset_formats
+    result["dataset_urls_total"] = len(dataset_urls)
+    result["dataset_urls_omitted"] = omitted
+    result["dataset_links"] = dataset_links
 
     # Step 8: relevance scoring
     score_result = score_page(pages, effective_keywords)

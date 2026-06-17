@@ -257,3 +257,9 @@ Tasks are ordered by dependency. Each section is a logical build phase; tasks wi
 | `portal_relevant_count` | integer; 0 for non-portal URLs |
 | `top_dataset_urls` | pipe-separated; empty for non-portal URLs |
 | `error_notes` | empty string if no errors |
+
+---
+
+## Note: `FEDERAL` state tag retired
+
+The `FEDERAL` state tag referenced throughout this historical task log (Phase 3 `StateTagger`, T-32, T-70, T-111, T-112, and the output column reference) has been retired. Federal agency URLs are now tagged `NATIONAL`, the same as any other non-state-specific URL. This entry is left in place for historical accuracy; the task descriptions above are not edited.

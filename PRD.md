@@ -53,7 +53,7 @@ To address this, `gov-scraper-v2` generates a per-state vocabulary file (`config
 
 - Read `config/urls.csv` at startup. The file is a living document; new rows are added over time as additional sources are identified. The pipeline must handle any list size without modification.
 - Use the `WEB_ADDRESS`, `PRIORITY_RESOURCE`, and `STATE` columns. Ignore all other columns including `RESOURCE_NAME`.
-- `STATE` must be a two-letter USPS abbreviation, `FEDERAL`, or `NATIONAL`. Rows with a missing or blank `STATE` value default to `NATIONAL`.
+- `STATE` must be a two-letter USPS abbreviation or `NATIONAL`. Rows with a missing or blank `STATE` value default to `NATIONAL`.
 - Deduplicate by `WEB_ADDRESS` at ingestion time (case-insensitive, normalised URL). Log any duplicate entries found and process each unique URL only once per run.
 - Skip rows where `WEB_ADDRESS` is empty or blank; log each skipped row.
 - Validate that each non-empty `WEB_ADDRESS` is a parseable URL; log and skip malformed entries.
@@ -84,8 +84,7 @@ To address this, `gov-scraper-v2` generates a per-state vocabulary file (`config
 Each URL's state tag is read directly from the `STATE` column in `config/urls.csv`. The analyst populates this column when adding new URLs. Valid values:
 
 - **Two-letter USPS abbreviation** (e.g., `MI`, `CA`, `TX`) — URL is scored using `config/keywords.csv` plus the state-specific terms from `config/state_definitions.json`.
-- **`FEDERAL`** — URL belongs to a federal agency; scored against `config/keywords.csv` only.
-- **`NATIONAL`** — URL is not state-specific (national associations, multi-state resources, unresolvable); scored against `config/keywords.csv` only.
+- **`NATIONAL`** — URL is not state-specific (federal agencies, national associations, multi-state resources, unresolvable); scored against `config/keywords.csv` only.
 
 A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is available from ingestion time, before any HTTP request is made, so all output rows carry a state value regardless of whether the URL is active.
 
@@ -105,7 +104,7 @@ A missing or blank `STATE` cell is treated as `NATIONAL`. The state tag is avail
 
 ### FR-7: State-Aware Keyword Relevance Scoring
 
-- **Effective keyword set:** `config/keywords.csv` terms UNION `config/state_definitions.json[state].census_terms` for the tagged state. For `FEDERAL` and `NATIONAL` URLs, use `config/keywords.csv` only.
+- **Effective keyword set:** `config/keywords.csv` terms UNION `config/state_definitions.json[state].census_terms` for the tagged state. For `NATIONAL` URLs, use `config/keywords.csv` only.
 - **Keyword matching:** case-insensitive, whole-word boundary match.
 - **Weighted scoring by content location:**
 
@@ -129,10 +128,11 @@ Scan all pages visited during the crawl (up to depth 2) for links to downloadabl
   - Link `href` ends with a detected extension.
   - Link `href` contains a detected extension before a query string (e.g., `download.php?file=data.csv`).
   - HTTP `Content-Disposition: attachment` header on a followed link.
-- **Ranking:** all candidates are scored before the cap is applied. Score = format tier (CSV/JSON/XLSX=3, XLS/XML=2, PDF/unknown=1) + Census keyword match in link anchor text (+2) + crawl depth proximity (seed page=+2, depth-1=+1, depth-2=+0). Candidates are sorted descending so the cap retains the most relevant URLs.
-- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated, top-50 by score), `dataset_formats` (pipe-separated, deduplicated, reflecting only formats present in the returned URLs).
-- PDF links are included in `dataset_urls` with format `pdf`; they are not combined with machine-readable format flags.
-- If more than 50 dataset URLs are detected, the lowest-scoring URLs are dropped and a warning is logged.
+- **Ranking:** all candidates are scored. Score = format tier (CSV/JSON/XLSX=3, XLS/XML=2, PDF/unknown=1) + Census keyword match in link anchor text (+2) + crawl depth proximity (seed page=+2, depth-1=+1, depth-2=+0). Candidates are sorted descending by score, most-relevant first.
+- **No dataset URL is dropped.** The complete ranked list is written, one row per URL, to a normalized companion CSV `output/<date>/dataset_urls.csv` (`url, dataset_url, format, rank`), keyed back to `results.csv` by `url`. One URL per row means this file has no cell-size limit.
+- Record `datasets_found: true/false`, `dataset_urls` (pipe-separated, ranked, **char-capped** at 32,000 chars to keep `results.csv` under the 32,767-char spreadsheet cell limit), `dataset_formats` (pipe-separated, deduplicated, all detected formats), `dataset_urls_total` (count of all detected URLs), and `dataset_urls_omitted` (count dropped from the `dataset_urls` cell to stay under the char budget — these remain in the companion CSV).
+- PDF links are included with format `pdf`; they are not combined with machine-readable format flags.
+- When the ranked `dataset_urls` cell is char-capped, the lowest-scoring URLs are the ones omitted from the cell (never from the companion CSV).
 
 ### FR-9: Priority URL Handling
 
@@ -202,7 +202,7 @@ If passive signals point to multiple platforms (rare), the active API probe resu
 effective_keywords = set(keywords.csv) | set(state_definitions[state].census_terms)
 ```
 
-For `FEDERAL` / `NATIONAL` URLs: `effective_keywords = set(keywords.csv)`.
+For `NATIONAL` URLs: `effective_keywords = set(keywords.csv)`.
 
 ### Normalization factor
 
@@ -238,8 +238,7 @@ State tags are maintained manually in the `STATE` column of `config/urls.csv`. T
 | Value | Meaning | Scoring behaviour |
 |---|---|---|
 | Two-letter abbreviation (e.g. `MI`) | State-specific URL | `keywords.csv` + `state_definitions.json[state].census_terms` |
-| `FEDERAL` | Federal agency URL | `keywords.csv` only |
-| `NATIONAL` | Non-state-specific or unknown | `keywords.csv` only |
+| `NATIONAL` | Non-state-specific or unknown (including federal agencies) | `keywords.csv` only |
 
 When the `STATE` column is absent or blank, the row defaults to `NATIONAL`.
 
@@ -401,11 +400,13 @@ Platform-specific adapter enumeration (paginating the dataset catalog via API an
 **File:** `output/<YYYY-MM-DD>/results.csv`  
 **One row per input URL** (including skipped/inactive URLs).
 
+**Companion file:** `output/<YYYY-MM-DD>/dataset_urls.csv` — normalized table holding the *complete* set of detected dataset URLs, one row per URL (`url, dataset_url, format, rank`). `url` is the foreign key back to `results.csv`. Written incrementally alongside `results.csv`. This is the authoritative full list; `results.csv.dataset_urls` is a char-capped convenience subset.
+
 | Column | Type | Description |
 |---|---|---|
 | `url` | string | Seed URL from `WEB_ADDRESS` column |
 | `priority` | boolean | `true` if `PRIORITY_RESOURCE` was `YES` |
-| `state` | string | Two-letter state code, `FEDERAL`, or `NATIONAL` |
+| `state` | string | Two-letter state code or `NATIONAL` |
 | `active` | boolean | `true` if terminal HTTP status was 200 |
 | `http_status` | integer | Terminal HTTP response code (or 0 for network failure) |
 | `final_url` | string | Resolved URL after redirect chain |
@@ -415,8 +416,10 @@ Platform-specific adapter enumeration (paginating the dataset catalog via API an
 | `relevance_score` | integer | 0–100 Census relevance score; null for detected portals, CDN-blocked URLs, and network errors (cases where scoring was impossible) |
 | `matched_keywords` | string | Pipe-separated list of matched keywords |
 | `datasets_found` | boolean | `true` if at least one downloadable file was detected |
-| `dataset_urls` | string | Pipe-separated list of detected dataset URLs (capped at 50) |
-| `dataset_formats` | string | Pipe-separated deduplicated format list (e.g., `csv\|xlsx\|pdf`) |
+| `dataset_urls` | string | Pipe-separated list of detected dataset URLs, ranked, char-capped at 32,000 chars for spreadsheet safety. The complete list lives in the companion `dataset_urls.csv`. |
+| `dataset_formats` | string | Pipe-separated deduplicated format list of all detected formats (e.g., `csv\|xlsx\|pdf`) |
+| `dataset_urls_total` | integer | Count of all detected dataset URLs (= number of rows for this `url` in the companion CSV) |
+| `dataset_urls_omitted` | integer | Count of URLs dropped from the `dataset_urls` cell to stay under the char budget; `0` when all fit. Omitted URLs are still in the companion CSV. |
 | `crawl_depth_reached` | integer | Deepest hop level successfully crawled (0–2) |
 | `portal_platform` | string | `Socrata`, `CKAN`, `ArcGIS Hub`, or empty string if not a portal |
 | `error_notes` | string | Description of any errors encountered; empty if none |
@@ -436,7 +439,7 @@ This is a living document. New rows are appended as additional government source
 | `RESOURCE_NAME` | No | Human label; ignored by all pipeline components |
 | `WEB_ADDRESS` | Yes | Seed URL to crawl |
 | `PRIORITY_RESOURCE` | Yes | `YES` to sort URL to front of queue; any other value treated as non-priority |
-| `STATE` | Yes | Manually assigned state tag: two-letter USPS abbreviation, `FEDERAL`, or `NATIONAL`. Missing or blank defaults to `NATIONAL`. Fill this column when adding new rows. |
+| `STATE` | Yes | Manually assigned state tag: two-letter USPS abbreviation or `NATIONAL`. Missing or blank defaults to `NATIONAL`. Fill this column when adding new rows. |
 
 ### `config/keywords.csv`
 
@@ -496,3 +499,57 @@ Additional enhancements:
 - Using `RESOURCE_NAME` for any automated inference or classification
 - Crawling URLs not present in `config/urls.csv`
 - Modifying or enriching `config/urls.csv` as a pipeline output
+
+---
+
+## 17. Streamlit UI
+
+### Overview
+
+`app.py` is a local Streamlit prototype that wraps the pipeline in a browser-based GUI. It has no effect on CLI operation and requires no changes to any pipeline module.
+
+### Entry point
+
+```bash
+streamlit run app.py
+```
+
+Requires `streamlit>=1.35.0` and `pandas>=2.0.0` (both included in `requirements.txt`).
+
+### Page 1 — Explorer
+
+Loads the most recently dated `output/<YYYY-MM-DD>/results.csv` and renders it as an interactive, filterable, sortable table.
+
+**Sidebar filters (applied top-to-bottom):**
+
+| Filter | Type | Behavior |
+|---|---|---|
+| State | Multiselect | Restricts rows to selected state(s). No selection = all states. |
+| Status | Radio (horizontal) | `Active` (default): `active=true` and no `error_notes`. `Inactive`: `active=false` and no `error_notes`. `Errors & blocked`: any row with a non-empty `error_notes`. `All`: no status filter. |
+| Unscored only | Checkbox | When checked, shows only rows with null `relevance_score`; disables the score slider. |
+| Score range | Slider (0–100) | Filters by `relevance_score`. Rows with null scores are excluded when the slider departs from the full 0–100 range and "unscored only" is unchecked. |
+| Keyword search | Multiselect | Options drawn from `keywords.csv` + all `state_definitions.json` census terms; OR logic against the `matched_keywords` column (case-insensitive). |
+| Portal platform | Multiselect | Restricts to rows matching the selected portal platform(s). |
+
+**Default sort:** Descending `relevance_score` (nulls last), then descending dataset count derived from `dataset_urls`.
+
+**Table columns:** URL, Priority, State, Active, Score, Datasets?, Formats, Dataset URLs, Matched Keywords, Depth, Portal, Error Notes. Boolean columns (`priority`, `active`, `datasets_found`) render as checkboxes; `relevance_score` renders as an integer.
+
+**Drill-down panel:** Selecting a row expands a panel below the table showing four metric tiles (Active, HTTP Status, Score, Crawl Depth), a "Matched keywords" expander (open by default, still collapsible) showing matched keywords as a wrapping row of colored badge chips (one per keyword, deterministic color per keyword), and the full `dataset_urls` list as a clickable link table with inferred format badges.
+
+### Page 2 — Scraper
+
+Accepts a URL and crawl parameters, runs the full pipeline in-process, and optionally appends the result to the most recent CSV.
+
+**Inputs:**
+- URL to scrape (text)
+- State (selectbox: NATIONAL + sorted state abbreviations)
+- Priority resource (checkbox, default off)
+- Crawl depth (slider 1–2, default 2)
+- Max pages per crawl (number input 5–75, default 25)
+
+**Execution:** Calls `run._process_url()` directly (imports the function from `run.py`; no subprocess). A `st.status` container streams live log lines from the `run`, `crawler`, and `scorer` loggers during the crawl via a custom `logging.Handler`.
+
+**Result display:** Four metric tiles (Active, HTTP Status, Score, Crawl Depth), a "Matched keywords" expander (open by default, still collapsible) rendering `matched_keywords` as colored badge chips (same component as the Explorer drill-down), `dataset_urls` clickable link table, `error_notes` warning banner, and `portal_platform` info banner.
+
+**Save:** "Add to most recent results.csv" appends the result row using `ReportWriter(resume=True)`. The button disables after a successful write to prevent duplicate rows.

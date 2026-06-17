@@ -18,7 +18,8 @@ _DOWNLOAD_PATH_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Higher tier = ranked first when truncating at the 50-URL cap.
+# Higher tier = ranked first; the full list is returned uncapped (the caller
+# char-caps the results.csv cell and writes the complete list to the companion CSV).
 _FORMAT_TIER: dict[str, int] = {
     "csv": 3, "json": 3, "xlsx": 3,
     "xls": 2, "xml": 2,
@@ -95,7 +96,7 @@ def detect_datasets(
     http_client=None,
     effective_keywords: frozenset | None = None,
     page_depths: dict[str, int] | None = None,
-) -> tuple[bool, list[str], list[str]]:
+) -> tuple[bool, list[str], list[str], list[tuple[str, str]]]:
     """T-60: Scan crawled pages for downloadable dataset links.
 
     Args:
@@ -105,9 +106,15 @@ def detect_datasets(
         page_depths: mapping of page URL to crawl hop depth; seed=0, depth-1 pages=1, etc.
 
     Returns:
-        (found, dataset_urls, dataset_formats) where dataset_urls is ranked by relevance
-        (format tier + Census keyword match in anchor text + crawl depth proximity) and
-        capped at 50. dataset_formats reflects only the formats present in the returned URLs.
+        (found, dataset_urls, dataset_formats, dataset_links) where:
+          - dataset_urls: full, uncapped list of URL strings ranked by relevance
+            (format tier + Census keyword match in anchor text + crawl depth proximity).
+          - dataset_formats: deduplicated sorted set of all formats present.
+          - dataset_links: parallel list of (url, format) tuples in the same ranked
+            order, carrying the per-URL format — including formats resolved only via a
+            Content-Disposition HEAD probe (which are not recoverable from the URL alone).
+            The caller char-caps the results.csv cell and writes the complete dataset_links
+            list to the normalized companion CSV.
     """
     candidates: list[tuple[int, str, str]] = []  # (score, url, fmt)
     seen_urls: set[str] = set()
@@ -154,18 +161,14 @@ def detect_datasets(
                 score = _dataset_score(fmt, anchor_text, page_depth, effective_keywords)
                 candidates.append((score, absolute, fmt))
 
-    _MAX_DATASET_URLS = 50
+    # Stable sort by descending score keeps DOM order within equal-score ties,
+    # so output is deterministic (NFR-4). The list is returned uncapped.
     candidates.sort(key=lambda x: x[0], reverse=True)
-    if len(candidates) > _MAX_DATASET_URLS:
-        logger.warning(
-            "Dataset URL count (%d) exceeds cap of %d; ranking by relevance and truncating",
-            len(candidates), _MAX_DATASET_URLS,
-        )
-        candidates = candidates[:_MAX_DATASET_URLS]
 
-    dataset_urls = [url for _, url, _ in candidates]
-    format_set = {fmt for _, _, fmt in candidates if fmt}
+    dataset_links = [(url, fmt) for _, url, fmt in candidates]
+    dataset_urls = [url for url, _ in dataset_links]
+    format_set = {fmt for _, fmt in dataset_links if fmt}
 
     found = bool(dataset_urls)
     formats = sorted(format_set)
-    return found, dataset_urls, formats
+    return found, dataset_urls, formats, dataset_links

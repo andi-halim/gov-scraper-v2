@@ -134,53 +134,53 @@ class TestCheckContentDisposition:
 
 class TestDetectDatasetsBasic:
     def test_empty_pages_list(self):
-        found, urls, fmts = detect_datasets([])
+        found, urls, fmts, _ = detect_datasets([])
         assert not found
         assert urls == []
         assert fmts == []
 
     def test_no_dataset_links(self):
         page = _page("https://example.gov/", "<html><body><a href='/about'>About</a></body></html>")
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert not found
         assert urls == []
         assert fmts == []
 
     def test_csv_link_detected(self):
         page = _page("https://example.gov/", '<a href="data.csv">Get Data</a>')
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert found
         assert any("data.csv" in u for u in urls)
         assert "csv" in fmts
 
     def test_pdf_link_included(self):
         page = _page("https://example.gov/", '<a href="annual.pdf">Report</a>')
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert found
         assert "pdf" in fmts
 
     def test_json_link_detected(self):
         page = _page("https://example.gov/", '<a href="/api/data.json">JSON</a>')
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert found
         assert "json" in fmts
 
     def test_xml_link_detected(self):
         page = _page("https://example.gov/", '<a href="/feeds/data.xml">XML</a>')
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert found
         assert "xml" in fmts
 
     def test_xls_link_detected(self):
         page = _page("https://example.gov/", '<a href="/files/old.xls">XLS</a>')
-        found, urls, fmts = detect_datasets([page])
+        found, urls, fmts, _ = detect_datasets([page])
         assert found
         assert "xls" in fmts
 
     def test_multiple_formats_deduplicated(self):
         html = '<a href="a.csv">A</a><a href="b.csv">B</a><a href="c.xlsx">C</a>'
         page = _page("https://example.gov/", html)
-        _, urls, fmts = detect_datasets([page])
+        _, urls, fmts, _ = detect_datasets([page])
         assert len(urls) == 3
         assert fmts.count("csv") == 1
         assert "xlsx" in fmts
@@ -188,38 +188,38 @@ class TestDetectDatasetsBasic:
     def test_formats_sorted(self):
         html = '<a href="d.xlsx">X</a><a href="e.csv">C</a><a href="f.json">J</a>'
         page = _page("https://example.gov/", html)
-        _, _, fmts = detect_datasets([page])
+        _, _, fmts, _ = detect_datasets([page])
         assert fmts == sorted(fmts)
 
     def test_non_200_page_skipped(self):
         page = _page("https://example.gov/", '<a href="data.csv">Get</a>', status=404)
-        found, _, _ = detect_datasets([page])
+        found, _, _, _ = detect_datasets([page])
         assert not found
 
     def test_zero_status_page_skipped(self):
         page = ("https://example.gov/", '<a href="data.csv">Get</a>', 0, False)
-        found, _, _ = detect_datasets([page])
+        found, _, _, _ = detect_datasets([page])
         assert not found
 
     def test_empty_html_page_skipped(self):
         page = ("https://example.gov/", "", 200, False)
-        found, _, _ = detect_datasets([page])
+        found, _, _, _ = detect_datasets([page])
         assert not found
 
     def test_skips_javascript_href(self):
         page = _page("https://example.gov/", '<a href="javascript:download()">DL</a>')
-        found, _, _ = detect_datasets([page])
+        found, _, _, _ = detect_datasets([page])
         assert not found
 
     def test_skips_mailto_href(self):
         page = _page("https://example.gov/", '<a href="mailto:info@gov.gov">Email</a>')
-        found, _, _ = detect_datasets([page])
+        found, _, _, _ = detect_datasets([page])
         assert not found
 
     def test_multiple_pages_all_scanned(self):
         p1 = _page("https://example.gov/", '<a href="a.csv">CSV</a>')
         p2 = _page("https://example.gov/page2", '<a href="b.xlsx">XLSX</a>')
-        found, urls, fmts = detect_datasets([p1, p2])
+        found, urls, fmts, _ = detect_datasets([p1, p2])
         assert found
         assert len(urls) == 2
         assert "csv" in fmts and "xlsx" in fmts
@@ -232,17 +232,17 @@ class TestDetectDatasetsBasic:
 class TestDetectDatasetsUrlResolution:
     def test_relative_href_resolved(self):
         page = _page("https://example.gov/section/", '<a href="../data.csv">CSV</a>')
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert "https://example.gov/data.csv" in urls
 
     def test_absolute_href_preserved(self):
         page = _page("https://example.gov/", '<a href="https://data.state.gov/export.json">JSON</a>')
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert "https://data.state.gov/export.json" in urls
 
     def test_root_relative_href_resolved(self):
         page = _page("https://example.gov/section/", '<a href="/files/data.csv">CSV</a>')
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert "https://example.gov/files/data.csv" in urls
 
 
@@ -257,23 +257,23 @@ class TestDetectDatasetsDeduplication:
             _page("https://example.gov/", html),
             _page("https://example.gov/page2", html),
         ]
-        _, urls, _ = detect_datasets(pages)
+        _, urls, _, _ = detect_datasets(pages)
         assert urls.count("https://example.gov/report.csv") == 1
 
     def test_duplicate_link_on_same_page(self):
         page = _page("https://example.gov/", '<a href="d.csv">A</a><a href="d.csv">B</a>')
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert urls.count("https://example.gov/d.csv") == 1
 
     def test_same_url_different_fragments_counted_once(self):
         html = '<a href="data.json#section1">A</a><a href="data.json#section2">B</a>'
         page = _page("https://example.gov/", html)
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert urls.count("https://example.gov/data.json") == 1
 
     def test_fragment_stripped_from_returned_url(self):
         page = _page("https://example.gov/", '<a href="report.csv#top">Download</a>')
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert urls == ["https://example.gov/report.csv"]
 
 
@@ -284,13 +284,13 @@ class TestDetectDatasetsDeduplication:
 class TestDetectDatasetsQueryString:
     def test_extension_before_query_string(self):
         page = _page("https://example.gov/", '<a href="/files/data.csv?v=2">DL</a>')
-        found, _, fmts = detect_datasets([page])
+        found, _, fmts, _ = detect_datasets([page])
         assert found
         assert "csv" in fmts
 
     def test_extension_in_query_string(self):
         page = _page("https://example.gov/", '<a href="/dl?file=report.xlsx">DL</a>')
-        found, _, fmts = detect_datasets([page])
+        found, _, fmts, _ = detect_datasets([page])
         assert found
         assert "xlsx" in fmts
 
@@ -308,20 +308,30 @@ class TestDetectDatasetsContentDisposition:
     def test_head_probe_fires_for_download_path(self):
         page = _page("https://example.gov/", '<a href="/download/budget">Get</a>')
         client = self._client_with_cd('attachment; filename="budget.csv"')
-        found, _, fmts = detect_datasets([page], http_client=client)
+        found, _, fmts, _ = detect_datasets([page], http_client=client)
         assert found
         assert "csv" in fmts
 
     def test_head_probe_fires_for_export_path(self):
         page = _page("https://example.gov/", '<a href="/export/data">Export</a>')
         client = self._client_with_cd('attachment; filename="data.json"')
-        found, _, fmts = detect_datasets([page], http_client=client)
+        found, _, fmts, _ = detect_datasets([page], http_client=client)
         assert found
         assert "json" in fmts
 
+    def test_head_probe_format_preserved_in_dataset_links(self):
+        # The URL has no extension; its format is only knowable from the HEAD probe.
+        # dataset_links must carry that format so the companion CSV records it.
+        page = _page("https://example.gov/", '<a href="/download/budget">Get</a>')
+        client = self._client_with_cd('attachment; filename="budget.csv"')
+        _, urls, _, links = detect_datasets([page], http_client=client)
+        assert links == [("https://example.gov/download/budget", "csv")]
+        # The format is absent from the URL itself, confirming it came from the probe.
+        assert ".csv" not in urls[0]
+
     def test_head_probe_not_fired_when_no_client(self):
         page = _page("https://example.gov/", '<a href="/download/budget">Get</a>')
-        found, _, _ = detect_datasets([page], http_client=None)
+        found, _, _, _ = detect_datasets([page], http_client=None)
         assert not found
 
     def test_no_head_probe_for_ordinary_path(self):
@@ -333,7 +343,7 @@ class TestDetectDatasetsContentDisposition:
     def test_attachment_without_extension_url_included_format_excluded(self):
         page = _page("https://example.gov/", '<a href="/download/data">Export</a>')
         client = self._client_with_cd("attachment")
-        found, urls, fmts = detect_datasets([page], http_client=client)
+        found, urls, fmts, _ = detect_datasets([page], http_client=client)
         assert found
         assert any("download/data" in u for u in urls)
         assert fmts == []
@@ -342,7 +352,7 @@ class TestDetectDatasetsContentDisposition:
         page = _page("https://example.gov/", '<a href="/download/page">DL</a>')
         mock = MagicMock()
         mock.head.return_value = _make_head_response(200)  # no CD header
-        found, _, _ = detect_datasets([page], http_client=mock)
+        found, _, _, _ = detect_datasets([page], http_client=mock)
         assert not found
 
     @pytest.mark.parametrize("path,label", [
@@ -361,7 +371,7 @@ class TestDetectDatasetsContentDisposition:
         page = _page("https://example.gov/", f'<a href="{path}">Get</a>')
         mock = MagicMock()
         mock.head.return_value = _make_head_response(200, f'attachment; filename="data.csv"')
-        found, _, fmts = detect_datasets([page], http_client=mock)
+        found, _, fmts, _ = detect_datasets([page], http_client=mock)
         assert found, f"Expected dataset detected for path pattern '{label}'"
         assert "csv" in fmts
 
@@ -374,13 +384,13 @@ class TestDetectDatasetsRanking:
     def test_csv_ranked_above_pdf(self):
         html = '<a href="report.pdf">PDF</a><a href="data.csv">CSV</a>'
         page = _page("https://example.gov/", html)
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert urls.index("https://example.gov/data.csv") < urls.index("https://example.gov/report.pdf")
 
     def test_json_ranked_above_xls(self):
         html = '<a href="old.xls">XLS</a><a href="data.json">JSON</a>'
         page = _page("https://example.gov/", html)
-        _, urls, _ = detect_datasets([page])
+        _, urls, _, _ = detect_datasets([page])
         assert urls.index("https://example.gov/data.json") < urls.index("https://example.gov/old.xls")
 
     def test_keyword_match_in_anchor_boosts_rank(self):
@@ -391,7 +401,7 @@ class TestDetectDatasetsRanking:
         )
         page = _page("https://example.gov/", html)
         keywords = frozenset(["county", "municipal", "township"])
-        _, urls, _ = detect_datasets([page], effective_keywords=keywords)
+        _, urls, _, _ = detect_datasets([page], effective_keywords=keywords)
         assert urls.index("https://example.gov/county.csv") < urls.index("https://example.gov/noise.csv")
 
     def test_seed_depth_ranked_above_deep_page(self):
@@ -400,18 +410,19 @@ class TestDetectDatasetsRanking:
         seed = _page("https://example.gov/", '<a href="seed-data.csv">Seed CSV</a>')
         depth2 = _page("https://example.gov/page2", '<a href="deep-data.csv">Deep CSV</a>')
         depths = {"https://example.gov/": 0, "https://example.gov/page2": 2}
-        _, urls, _ = detect_datasets([depth2, seed], page_depths=depths)
+        _, urls, _, _ = detect_datasets([depth2, seed], page_depths=depths)
         assert urls.index("https://example.gov/seed-data.csv") < urls.index("https://example.gov/deep-data.csv")
 
-    def test_formats_reflect_returned_urls_only_when_truncated(self):
-        # 51 PDFs + 1 CSV — after truncation to 50, CSV should be in top 50 (higher tier)
-        pdfs = "".join(f'<a href="r{i}.pdf">PDF {i}</a>' for i in range(51))
+    def test_full_list_returned_uncapped_and_ranked(self):
+        # 60 PDFs + 1 CSV — the full list is returned (no 50-cap); the CSV ranks first.
+        # Char-capping for the results.csv cell happens in run.py, not here.
+        pdfs = "".join(f'<a href="r{i}.pdf">PDF {i}</a>' for i in range(60))
         html = f'<a href="data.csv">Data</a>{pdfs}'
         page = _page("https://example.gov/", html)
-        _, urls, fmts = detect_datasets([page])
-        assert len(urls) == 50
-        assert "csv" in fmts  # CSV ranked above PDFs, appears in top 50
-        assert urls[0] == "https://example.gov/data.csv"
+        _, urls, fmts, _ = detect_datasets([page])
+        assert len(urls) == 61  # all candidates returned, nothing truncated
+        assert urls[0] == "https://example.gov/data.csv"  # CSV ranked above PDFs
+        assert set(fmts) == {"csv", "pdf"}
 
     def test_no_keywords_still_ranks_by_format_and_depth(self):
         # PDF at depth 1 (score=1+1=2) vs CSV at depth 2 (score=3+0=3).
@@ -419,7 +430,7 @@ class TestDetectDatasetsRanking:
         depth1 = _page("https://example.gov/p1", '<a href="report.pdf">PDF</a>')
         depth2 = _page("https://example.gov/p2", '<a href="data.csv">CSV</a>')
         depths = {"https://example.gov/p1": 1, "https://example.gov/p2": 2}
-        _, urls, _ = detect_datasets([depth1, depth2], page_depths=depths, effective_keywords=None)
+        _, urls, _, _ = detect_datasets([depth1, depth2], page_depths=depths, effective_keywords=None)
         assert urls.index("https://example.gov/data.csv") < urls.index("https://example.gov/report.pdf")
 
 

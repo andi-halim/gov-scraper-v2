@@ -7,7 +7,7 @@ Covered URL types:
   1. https://michigan.gov         — plain state .gov page  (expect state=MI)
   2. https://data.cityofchicago.org — Socrata portal       (expect Socrata detection)
   3. https://catalog.data.gov     — CKAN portal (federal)  (expect CKAN detection)
-  4. https://census.gov           — federal agency site    (expect state=FEDERAL)
+  4. https://census.gov           — federal agency site    (tagged NATIONAL in urls.csv)
   5. https://opendata.dc.gov      — ArcGIS Hub             (expect ArcGIS Hub detection)
 """
 import os
@@ -52,8 +52,8 @@ class TestMichiganGov:
 
 
 @pytest.mark.skipif(SKIP, reason=SKIP_REASON)
-class TestCensusGovFederal:
-    """census.gov — federal agency; should tag as FEDERAL."""
+class TestCensusGov:
+    """census.gov — federal agency; tagged NATIONAL in urls.csv."""
 
     URL = "https://census.gov"
 

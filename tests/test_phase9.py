@@ -357,6 +357,100 @@ class TestSerialize:
         row = _serialize({"active": False})
         assert row["active"] == "false"
 
+    def test_count_columns_serialized_as_ints(self):
+        row = _serialize({"dataset_urls_total": 73, "dataset_urls_omitted": 12})
+        assert row["dataset_urls_total"] == 73
+        assert row["dataset_urls_omitted"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Normalized companion CSV (dataset_urls.csv)
+# ---------------------------------------------------------------------------
+
+from reporter.writer import COMPANION_COLUMNS, COMPANION_FILENAME
+
+
+class TestCompanionCsv:
+    def test_companion_created_with_header(self, tmp_path):
+        out = tmp_path / "run"
+        with ReportWriter(out) as w:
+            w.open()
+        path = out / COMPANION_FILENAME
+        assert path.exists()
+        with path.open() as fh:
+            header = fh.readline().strip().split(",")
+        assert header == COMPANION_COLUMNS
+
+    def test_full_list_expanded_one_row_per_url(self, tmp_path):
+        out = tmp_path / "run"
+        links = [
+            ("https://a.gov/d.csv", "csv"),
+            ("https://a.gov/e.json", "json"),
+            ("https://a.gov/f.pdf", "pdf"),
+        ]
+        with ReportWriter(out) as w:
+            w.open()
+            w.append_row(_full_result(
+                url="https://a.gov/",
+                dataset_urls=[u for u, _ in links[:2]],  # char-capped cell subset
+                dataset_links=links,                      # full list → companion
+            ))
+        rows = _read_csv(out / COMPANION_FILENAME)
+        assert [r["dataset_url"] for r in rows] == [u for u, _ in links]
+        assert [r["rank"] for r in rows] == ["1", "2", "3"]
+        assert [r["format"] for r in rows] == ["csv", "json", "pdf"]
+        assert all(r["url"] == "https://a.gov/" for r in rows)
+
+    def test_no_full_list_writes_no_companion_rows(self, tmp_path):
+        out = tmp_path / "run"
+        with ReportWriter(out) as w:
+            w.open()
+            w.append_row(_full_result())  # no dataset_links key
+        rows = _read_csv(out / COMPANION_FILENAME)
+        assert rows == []
+
+    def test_head_probe_format_written_for_extensionless_url(self, tmp_path):
+        # detect_datasets resolved this download endpoint's format via a HEAD probe;
+        # the companion must record that format even though the URL has no extension.
+        out = tmp_path / "run"
+        with ReportWriter(out) as w:
+            w.open()
+            w.append_row(_full_result(
+                url="https://a.gov/",
+                dataset_links=[("https://a.gov/download?id=5", "csv")],
+            ))
+        rows = _read_csv(out / COMPANION_FILENAME)
+        assert rows[0]["dataset_url"] == "https://a.gov/download?id=5"
+        assert rows[0]["format"] == "csv"
+
+    def test_unknown_format_written_as_blank(self, tmp_path):
+        out = tmp_path / "run"
+        with ReportWriter(out) as w:
+            w.open()
+            w.append_row(_full_result(
+                url="https://a.gov/",
+                dataset_links=[("https://a.gov/download/data", "")],
+            ))
+        rows = _read_csv(out / COMPANION_FILENAME)
+        assert rows[0]["format"] == ""
+
+    def test_resume_appends_companion_without_new_header(self, tmp_path):
+        out = tmp_path / "run"
+        with ReportWriter(out) as w:
+            w.open()
+            w.append_row(_full_result(
+                url="https://a.gov/", dataset_links=[("https://a.gov/d.csv", "csv")]
+            ))
+        with ReportWriter(out) as w:
+            w.open(resume=True)
+            w.append_row(_full_result(
+                url="https://b.gov/", dataset_links=[("https://b.gov/e.json", "json")]
+            ))
+        rows = _read_csv(out / COMPANION_FILENAME)
+        assert [r["dataset_url"] for r in rows] == [
+            "https://a.gov/d.csv", "https://b.gov/e.json",
+        ]
+
     def test_none_becomes_empty_string(self):
         row = _serialize({"robots_allowed": None})
         assert row["robots_allowed"] == ""

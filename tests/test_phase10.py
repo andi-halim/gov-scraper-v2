@@ -384,7 +384,7 @@ class TestPortalRouting:
         portal = _make_portal_detector(platform=None)
 
         with patch("run.crawl_url", return_value=([], 0, {})) as mock_crawl, \
-             patch("run.detect_datasets", return_value=(False, [], [])), \
+             patch("run.detect_datasets", return_value=(False, [], [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset({"county"})):
             _process_url(
@@ -402,7 +402,7 @@ class TestPortalRouting:
 class TestProcessUrlStandardPipeline:
     def _call(self, url="https://example.gov/", state="NATIONAL",
                crawl_pages=None, crawl_depth=0,
-               datasets=(False, [], []),
+               datasets=(False, [], [], []),
                score=None):
         client = _make_http_client()
         portal = _make_portal_detector(platform=None)
@@ -433,12 +433,12 @@ class TestProcessUrlStandardPipeline:
         assert result["crawl_depth_reached"] == 2
 
     def test_datasets_found_true(self):
-        result = self._call(datasets=(True, ["https://e.gov/data.csv"], ["csv"]))
+        result = self._call(datasets=(True, ["https://e.gov/data.csv"], ["csv"], [("https://e.gov/data.csv", "csv")]))
         assert result["datasets_found"] is True
         assert "https://e.gov/data.csv" in result["dataset_urls"]
 
     def test_datasets_found_false(self):
-        result = self._call(datasets=(False, [], []))
+        result = self._call(datasets=(False, [], [], []))
         assert result["datasets_found"] is False
 
     def test_relevance_score_recorded(self):
@@ -458,7 +458,7 @@ class TestProcessUrlStandardPipeline:
         client = _make_http_client(js_rendered=True)
         portal = _make_portal_detector()
         with patch("run.crawl_url", return_value=([], 0, {})), \
-             patch("run.detect_datasets", return_value=(False, [], [])), \
+             patch("run.detect_datasets", return_value=(False, [], [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
             result = _process_url(
@@ -473,7 +473,7 @@ class TestProcessUrlStandardPipeline:
                                    http_status=200, js_rendered=True)
         portal = _make_portal_detector(platform=None)
         with patch("run.crawl_url", return_value=([], 0, {})) as mock_crawl, \
-             patch("run.detect_datasets", return_value=(False, [], [])), \
+             patch("run.detect_datasets", return_value=(False, [], [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
             _process_url(
@@ -487,7 +487,7 @@ class TestProcessUrlStandardPipeline:
     def test_priority_flag_preserved(self):
         client = _make_http_client()
         with patch("run.crawl_url", return_value=([], 0, {})), \
-             patch("run.detect_datasets", return_value=(False, [], [])), \
+             patch("run.detect_datasets", return_value=(False, [], [], [])), \
              patch("run.score_page", return_value=_score_result()), \
              patch("run.get_effective_keywords", return_value=frozenset()):
             result = _process_url(

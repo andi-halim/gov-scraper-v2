@@ -8,3 +8,6 @@ unicodedata2>=15.1.0
 pdfplumber>=0.11.0
 google-genai>=2.6.0
 python-dotenv>=1.2.2
+streamlit>=1.48.0
+pandas>=2.0.0
+plotly>=5.0.0

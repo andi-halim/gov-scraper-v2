@@ -77,7 +77,7 @@ The unit test suite currently covers 382 tests across all pipeline phases.
 |---|---|
 | `url` | Seed URL from `config/urls.csv` |
 | `priority` | `true` if marked as `PRIORITY_RESOURCE=YES` |
-| `state` | Two-letter state code, `FEDERAL`, or `NATIONAL` |
+| `state` | Two-letter state code or `NATIONAL` |
 | `active` | `true` if the site returned HTTP 200 |
 | `http_status` | Terminal HTTP status code (0 for network failure) |
 | `final_url` | Resolved URL after all redirects |
@@ -117,7 +117,7 @@ Open `config/urls.csv` and append a row:
 | `RESOURCE_NAME` | Human label (ignored by the pipeline) |
 | `WEB_ADDRESS` | Full URL including `https://` |
 | `PRIORITY_RESOURCE` | `YES` to sort to the front of the queue; any other value for normal priority |
-| `STATE` | Two-letter USPS abbreviation (e.g. `CA`), `FEDERAL`, or `NATIONAL`. Blank defaults to `NATIONAL`. |
+| `STATE` | Two-letter USPS abbreviation (e.g. `CA`) or `NATIONAL`. Blank defaults to `NATIONAL`. |
 
 Then run `python run.py --new-only` to process only the new entries.
 
@@ -159,7 +159,7 @@ gov-scraper-v2/
 Each URL is scored against an effective keyword set:
 
 - **State-tagged URLs** (e.g. `STATE=CA`): base `keywords.csv` terms + state-specific Census terms from `state_definitions.json`
-- **`FEDERAL` / `NATIONAL` URLs**: base `keywords.csv` terms only
+- **`NATIONAL` URLs**: base `keywords.csv` terms only
 
 Keywords are matched case-insensitively on whole-word boundaries across three content tiers:
 
